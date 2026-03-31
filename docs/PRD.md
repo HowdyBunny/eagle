@@ -159,3 +159,9 @@ RAG搜索：引入向量数据库，Research Agent搜索到的内容不仅是报
 其他问题：
 
 关于Agent如何部署：部署在hunter的电脑吗？这样子的话就可以直接进行交互。部署在云？这样子花费会高。但同时需要考虑：当hunter去点击了很多个候选人的收录，后端同时处理多个评估，是否能承受此并发
+
+文档链接：
+data_schema.md
+pipeline.md
+tech.md
+ER.png
