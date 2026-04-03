@@ -2,21 +2,20 @@
 Coordinator Agent (CA)
 
 Two-layer architecture:
-- Dialogue layer: Claude handles hunter interaction, intent recognition, requirement clarification
+- Dialogue layer: LLM handles hunter interaction, intent recognition, requirement clarification
 - Orchestration layer: Tool use loop executes actions and manages state
 """
 
 import json
 import uuid
 
-import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tools import CA_TOOLS, ToolExecutor
-from app.config import settings
 from app.models.conversation_log import ConversationRole
 from app.schemas.conversation import ChatResponse
 from app.services import conversation_service, project_service
+from app.services.llm_client import LLMClient
 from app.utils.logger import logger
 
 # TODO: Tune this system prompt through real-world testing with hunters
@@ -60,10 +59,7 @@ CA_SYSTEM_PROMPT = """你是 Eagle 系统的 Coordinator Agent（协调者），
 
 class CoordinatorAgent:
     def __init__(self, db: AsyncSession):
-        self.client = anthropic.AsyncAnthropic(
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=settings.ANTHROPIC_BASE_URL,  # None = use official API
-        )
+        self.llm = LLMClient()
         self.tool_executor = ToolExecutor(db)
         self.db = db
 
@@ -76,75 +72,31 @@ class CoordinatorAgent:
             if project.requirement_profile:
                 project_context += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
 
-        # 2. Load conversation history
+        # 2. Build messages
+        messages: list[dict] = [
+            {"role": "system", "content": CA_SYSTEM_PROMPT + project_context},
+        ]
+
+        # 3. Load conversation history
         history = await conversation_service.get_history(self.db, project_id, limit=20)
-        messages: list[dict] = []
         for log in history:
             messages.append({
                 "role": "user" if log.role == ConversationRole.HUNTER else "assistant",
                 "content": log.content,
             })
 
-        # 3. Add current message
+        # 4. Add current message and persist
         messages.append({"role": "user", "content": user_message})
-
-        # 4. Save hunter message
         await conversation_service.save_message(
             self.db, project_id, ConversationRole.HUNTER, user_message
         )
 
-        # 5. Agentic tool-use loop
-        system = CA_SYSTEM_PROMPT + project_context
-        actions_taken: list[str] = []
-        intent_json: dict | None = None
+        # 5. Run agentic tool-use loop
+        reply_text, actions_taken, intent_json = await self.llm.agentic_loop(
+            messages, CA_TOOLS, self.tool_executor
+        )
 
-        while True:
-            response = await self.client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=4096,
-                system=system,
-                messages=messages,
-                tools=CA_TOOLS,
-            )
-
-            # Collect assistant message
-            assistant_content = response.content
-            messages.append({"role": "assistant", "content": assistant_content})
-
-            if response.stop_reason == "end_turn":
-                # Extract final text reply
-                reply_text = ""
-                for block in assistant_content:
-                    if hasattr(block, "text"):
-                        reply_text += block.text
-                break
-
-            if response.stop_reason == "tool_use":
-                # Execute tool calls
-                tool_results = []
-                for block in assistant_content:
-                    if block.type == "tool_use":
-                        logger.info(f"CA calling tool: {block.name} with {block.input}")
-                        result = await self.tool_executor.execute(block.name, block.input)
-                        actions_taken.append(f"{block.name}: {list(block.input.keys())}")
-
-                        # Capture intent from tool calls
-                        if intent_json is None:
-                            intent_json = {"action": block.name, "params": block.input}
-
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": json.dumps(result, ensure_ascii=False, default=str),
-                        })
-
-                messages.append({"role": "user", "content": tool_results})
-            else:
-                # Unexpected stop reason
-                reply_text = "发生了意外的错误，请重试。"
-                break
-
-        # 6. Save assistant reply
+        # 6. Persist assistant reply
         await conversation_service.save_message(
             self.db, project_id, ConversationRole.ASSISTANT, reply_text, intent_json
         )

@@ -7,15 +7,22 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://eagle:eagle@localhost:5432/eagle"
 
-    # Anthropic (LLM for all Agents)
-    ANTHROPIC_API_KEY: str
-    ANTHROPIC_BASE_URL: str | None = None  # Override for compatible APIs (e.g. local proxy, third-party)
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    # Core LLM — used by CA, RA, EA
+    # LLM_PROVIDER: "openai" (default) uses OpenAI SDK; "anthropic" uses Anthropic SDK
+    LLM_PROVIDER: str = "openai"
+    LLM_API_KEY: str
+    LLM_MODEL: str = "gpt-4o"
+    # openai:    LLM_BASE_URL must include /v1  (e.g. https://your-provider.com/v1)
+    # anthropic: LLM_BASE_URL must NOT include /v1 (Anthropic SDK appends it automatically)
+    LLM_BASE_URL: str | None = None
 
-    # OpenAI (Embedding only)
-    OPENAI_API_KEY: str
-    OPENAI_BASE_URL: str | None = None  # Override for compatible APIs (e.g. Azure, local proxy)
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    # Web search (used by RA when LLM_PROVIDER=openai via responses.create)
+    WEB_SEARCH_CONTEXT_SIZE: str = "low"  # "low" | "medium" | "high"
+
+    # Embedding — any OpenAI-compatible embedding endpoint
+    EMBEDDING_API_KEY: str
+    EMBEDDING_BASE_URL: str | None = None  # None = OpenAI official; must include /v1 for compatible endpoints
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSIONS: int = 1536
 
     # Auth

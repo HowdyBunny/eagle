@@ -1,11 +1,15 @@
 """
 Research Agent (RA)
 
-Researches industry knowledge using Claude's built-in web_search tool.
+Researches industry knowledge using LLM with web search.
 Produces three outputs:
 1. Markdown report (saved to file, path stored in project_research)
 2. Structured ontology JSON (saved to skill_ontology table)
 3. Semantic knowledge chunks (embedded and stored in industry_knowledge table)
+
+Web search behavior:
+  LLM_PROVIDER=openai  → OpenAI Responses API with web_search tool (real-time)
+  LLM_PROVIDER=anthropic → Anthropic built-in web_search_20250305 tool (real-time)
 """
 
 import json
@@ -13,13 +17,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.project_research import ProjectResearch
 from app.services import ontology_service, project_service, research_service
 from app.services.embedding_service import EmbeddingService
+from app.services.llm_client import LLMClient
 from app.utils.logger import logger
 from app.utils.paths import eagle_dir
 
@@ -63,16 +66,13 @@ RA_SYSTEM_PROMPT = """你是 Eagle 系统的 Research Agent（调研者），专
 ===CHUNK_SEPARATOR===
 ...
 
-请使用 web_search 工具搜索最新信息，确保内容准确、实用、专业。
+请使用联网搜索工具获取最新信息，确保内容准确、实用、专业。
 """
 
 
 class ResearchAgent:
     def __init__(self, db: AsyncSession):
-        self.client = anthropic.AsyncAnthropic(
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=settings.ANTHROPIC_BASE_URL,  # None = use official API
-        )
+        self.llm = LLMClient()
         self.db = db
         self.embedding_svc = EmbeddingService()
 
@@ -88,20 +88,10 @@ class ResearchAgent:
         if additional_context:
             prompt += f"\n\n额外背景：{additional_context}"
 
-        # Call Claude with built-in web_search tool
-        response = await self.client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=8192,
-            system=RA_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        )
-
-        # Extract final text (after any tool use)
-        full_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                full_text += block.text
+        full_text = await self.llm.research_chat([
+            {"role": "system", "content": RA_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ])
 
         # Parse outputs
         markdown_report, ontology_data, knowledge_chunks = self._parse_response(full_text, topic)
@@ -117,7 +107,6 @@ class ResearchAgent:
             if chunk_text.strip():
                 await self.embedding_svc.embed_industry_chunk(self.db, ontology.id, chunk_text.strip())
 
-        # Create project_research record
         research = await research_service.create_research(
             db=self.db,
             project_id=project_id,
@@ -167,13 +156,11 @@ class ResearchAgent:
                             c for c in chunks_part.split("===CHUNK_SEPARATOR===") if c.strip()
                         ]
                     else:
-                        json_text = rest.strip()
                         try:
-                            ontology_data = json.loads(json_text)
+                            ontology_data = json.loads(rest.strip())
                         except json.JSONDecodeError:
                             pass
             else:
-                # Fallback: treat entire response as markdown report
                 markdown_report = full_text
                 knowledge_chunks = [full_text]
 
@@ -185,7 +172,6 @@ class ResearchAgent:
         return markdown_report, ontology_data, knowledge_chunks
 
     async def _save_report(self, project_id: uuid.UUID, topic: str, content: str) -> str:
-        # Resolve the reports directory: prefer the project's own folder, fall back to Eagle/projects/
         project = await project_service.get_project(self.db, project_id)
         if project and project.folder_path:
             reports_dir = Path(project.folder_path) / "reports"

@@ -1,5 +1,5 @@
 """
-Claude tool use definitions for the Coordinator Agent (CA).
+Tool definitions for the Coordinator Agent (CA) — OpenAI function-calling format.
 
 These tools bridge the LLM's function calls to actual service layer operations.
 """
@@ -21,113 +21,134 @@ from app.services import (
 from app.services.search_service import SearchService
 
 # ──────────────────────────────────────────────
-# Claude tool schema definitions
+# OpenAI function-calling tool definitions
 # ──────────────────────────────────────────────
 
 CA_TOOLS: list[dict] = [
     {
-        "name": "create_project",
-        "description": "Create a new headhunting project for a client. Use when the hunter explicitly wants to start a new project.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "client_name": {"type": "string", "description": "Name of the client company"},
-                "project_name": {"type": "string", "description": "Descriptive name for the project"},
-                "jd_raw": {"type": "string", "description": "Raw job description text from the client"},
-                "mode": {
-                    "type": "string",
-                    "enum": ["precise", "explore"],
-                    "description": "precise: ask structured questions first; explore: search immediately and refine via feedback",
+        "type": "function",
+        "function": {
+            "name": "create_project",
+            "description": "Create a new headhunting project for a client. Use when the hunter explicitly wants to start a new project.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client_name": {"type": "string", "description": "Name of the client company"},
+                    "project_name": {"type": "string", "description": "Descriptive name for the project"},
+                    "jd_raw": {"type": "string", "description": "Raw job description text from the client"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["precise", "explore"],
+                        "description": "precise: ask structured questions first; explore: search immediately and refine via feedback",
+                    },
+                },
+                "required": ["client_name", "project_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clarify_requirement",
+            "description": "Update the project's requirement_profile with clarified structured requirements. Call after gathering enough info from the hunter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project"},
+                    "requirement_profile": {
+                        "type": "object",
+                        "description": "Structured requirement profile JSON with hard requirements (location, experience, salary) and soft requirements",
+                    },
+                },
+                "required": ["project_id", "requirement_profile"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_talent_pool",
+            "description": "Search the talent pool using hybrid search (SQL filter + semantic). Call when hunter wants to find candidates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Semantic search query describing the ideal candidate"},
+                    "location": {"type": "string", "description": "Filter by location"},
+                    "min_years_experience": {"type": "number", "description": "Minimum years of experience"},
+                    "max_years_experience": {"type": "number", "description": "Maximum years of experience"},
+                    "current_company": {"type": "string", "description": "Filter by current company"},
+                    "limit": {"type": "integer", "description": "Max results to return", "default": 10},
                 },
             },
-            "required": ["client_name", "project_name"],
         },
     },
     {
-        "name": "clarify_requirement",
-        "description": "Update the project's requirement_profile with clarified structured requirements. Call after gathering enough info from the hunter.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "UUID of the project"},
-                "requirement_profile": {
-                    "type": "object",
-                    "description": "Structured requirement profile JSON with hard requirements (location, experience, salary) and soft requirements",
+        "type": "function",
+        "function": {
+            "name": "trigger_evaluation",
+            "description": "Trigger the Evaluator Agent to score a candidate against a project. Use after finding a promising candidate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project"},
+                    "candidate_id": {"type": "string", "description": "UUID of the candidate to evaluate"},
                 },
-            },
-            "required": ["project_id", "requirement_profile"],
-        },
-    },
-    {
-        "name": "search_talent_pool",
-        "description": "Search the talent pool using hybrid search (SQL filter + semantic). Call when hunter wants to find candidates.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Semantic search query describing the ideal candidate"},
-                "location": {"type": "string", "description": "Filter by location"},
-                "min_years_experience": {"type": "number", "description": "Minimum years of experience"},
-                "max_years_experience": {"type": "number", "description": "Maximum years of experience"},
-                "current_company": {"type": "string", "description": "Filter by current company"},
-                "limit": {"type": "integer", "description": "Max results to return", "default": 10},
+                "required": ["project_id", "candidate_id"],
             },
         },
     },
     {
-        "name": "trigger_evaluation",
-        "description": "Trigger the Evaluator Agent to score a candidate against a project. Use after finding a promising candidate.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "UUID of the project"},
-                "candidate_id": {"type": "string", "description": "UUID of the candidate to evaluate"},
-            },
-            "required": ["project_id", "candidate_id"],
-        },
-    },
-    {
-        "name": "request_industry_research",
-        "description": "Trigger the Research Agent to research an industry/topic and build knowledge base. Use when hunter asks about a new domain.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "UUID of the project"},
-                "topic": {"type": "string", "description": "Industry or topic to research (e.g. '储能行业', '大模型部署')"},
-                "additional_context": {"type": "string", "description": "Optional context about what specifically to focus on"},
-            },
-            "required": ["project_id", "topic"],
-        },
-    },
-    {
-        "name": "update_preference",
-        "description": "Record hunter feedback and weight adjustments when hunter reacts to a candidate. Use to capture implicit preferences.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "UUID of the project"},
-                "candidate_id": {"type": "string", "description": "UUID of the candidate being commented on (optional)"},
-                "feedback_type": {
-                    "type": "string",
-                    "enum": ["weight_adjustment", "positive_signal", "negative_signal", "general"],
+        "type": "function",
+        "function": {
+            "name": "request_industry_research",
+            "description": "Trigger the Research Agent to research an industry/topic and build knowledge base. Use when hunter asks about a new domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project"},
+                    "topic": {"type": "string", "description": "Industry or topic to research (e.g. '储能行业', '大模型部署')"},
+                    "additional_context": {"type": "string", "description": "Optional context about what specifically to focus on"},
                 },
-                "hunter_comment": {"type": "string", "description": "Original hunter comment verbatim"},
-                "weight_adjustment": {
-                    "type": "object",
-                    "description": "Dimension weight changes, e.g. {'管理经验': 15, '技术深度': -5}",
-                },
+                "required": ["project_id", "topic"],
             },
-            "required": ["project_id", "feedback_type", "hunter_comment"],
         },
     },
     {
-        "name": "change_project_context",
-        "description": "Switch the active project context. Use when hunter mentions switching to a different project.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "UUID of the project to switch to"},
+        "type": "function",
+        "function": {
+            "name": "update_preference",
+            "description": "Record hunter feedback and weight adjustments when hunter reacts to a candidate. Use to capture implicit preferences.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project"},
+                    "candidate_id": {"type": "string", "description": "UUID of the candidate being commented on (optional)"},
+                    "feedback_type": {
+                        "type": "string",
+                        "enum": ["weight_adjustment", "positive_signal", "negative_signal", "general"],
+                    },
+                    "hunter_comment": {"type": "string", "description": "Original hunter comment verbatim"},
+                    "weight_adjustment": {
+                        "type": "object",
+                        "description": "Dimension weight changes, e.g. {'管理经验': 15, '技术深度': -5}",
+                    },
+                },
+                "required": ["project_id", "feedback_type", "hunter_comment"],
             },
-            "required": ["project_id"],
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "change_project_context",
+            "description": "Switch the active project context. Use when hunter mentions switching to a different project.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project to switch to"},
+                },
+                "required": ["project_id"],
+            },
         },
     },
 ]

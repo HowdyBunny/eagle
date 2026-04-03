@@ -2,7 +2,7 @@
 Evaluator Agent (EA)
 
 Evaluates candidates against project requirements using multi-dimensional scoring.
-Uses Claude for deep semantic analysis combined with:
+Uses LLM for deep semantic analysis combined with:
 - Project requirement profile
 - Candidate data
 - Hunter preference weights (from preference_logs)
@@ -12,14 +12,14 @@ Uses Claude for deep semantic analysis combined with:
 import json
 import uuid
 
-import anthropic
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.project_candidate import ProjectCandidate
 from app.services import candidate_service, evaluation_service, preference_service, project_service
 from app.services.embedding_service import EmbeddingService
+from app.services.llm_client import LLMClient
 from app.utils.logger import logger
 
 # TODO: Tune this evaluation prompt through testing with real candidates and projects
@@ -63,10 +63,7 @@ EA_SYSTEM_PROMPT = """你是 Eagle 系统的 Evaluator Agent（评估者）。
 
 class EvaluatorAgent:
     def __init__(self, db: AsyncSession):
-        self.client = anthropic.AsyncAnthropic(
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=settings.ANTHROPIC_BASE_URL,  # None = use official API
-        )
+        self.llm = LLMClient()
         self.db = db
         self.embedding_svc = EmbeddingService()
 
@@ -91,17 +88,14 @@ class EvaluatorAgent:
             # 5. Build evaluation prompt
             prompt = self._build_evaluation_prompt(project, candidate, weight_context, industry_context)
 
-            # 6. Call Claude for evaluation
-            response = await self.client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=2048,
-                system=EA_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            # 6. Call LLM for evaluation
+            reply_text = await self.llm.simple_chat([
+                {"role": "system", "content": EA_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ])
 
             # 7. Parse JSON response
-            reply_text = response.content[0].text.strip()
-            # Strip markdown code block if present
+            reply_text = reply_text.strip()
             if reply_text.startswith("```"):
                 reply_text = reply_text.split("```")[1]
                 if reply_text.startswith("json"):
@@ -141,7 +135,7 @@ class EvaluatorAgent:
 {candidate.experience_summary or '无详细描述'}
 """
 
-        prompt = f"""## 项目信息
+        return f"""## 项目信息
 客户: {project.client_name}
 项目: {project.project_name}
 职位描述: {project.jd_raw or '未提供'}
@@ -157,10 +151,8 @@ class EvaluatorAgent:
 {industry_context or '无相关行业知识'}
 
 请对此候选人进行评估，严格按照JSON格式输出。"""
-        return prompt
 
     async def _get_industry_context(self, project) -> str:
-        """Get relevant industry knowledge via vector search on requirement profile."""
         if not project.requirement_profile:
             return ""
         try:
@@ -173,9 +165,7 @@ class EvaluatorAgent:
                 ORDER BY embedding <=> CAST(:query_vec AS vector)
                 LIMIT 3
             """)
-            result = await self.db.execute(
-                stmt, {"query_vec": str(query_embedding)}
-            )
+            result = await self.db.execute(stmt, {"query_vec": str(query_embedding)})
             rows = result.fetchall()
             if not rows:
                 return ""

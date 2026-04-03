@@ -12,10 +12,10 @@ from app.utils.logger import logger
 class EmbeddingService:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL,  # None = use official API
+            api_key=settings.EMBEDDING_API_KEY,
+            base_url=settings.EMBEDDING_BASE_URL,  # None = OpenAI official; include /v1 for compatible endpoints
         )
-        self.model = settings.OPENAI_EMBEDDING_MODEL
+        self.model = settings.EMBEDDING_MODEL
 
     async def get_embedding(self, text: str) -> list[float]:
         response = await self.client.embeddings.create(
