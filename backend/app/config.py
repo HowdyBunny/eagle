@@ -1,11 +1,11 @@
+from pathlib import Path
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://eagle:eagle@localhost:5432/eagle"
 
     # Core LLM — used by CA, RA, EA
     # LLM_PROVIDER: "openai" (default) uses OpenAI SDK; "anthropic" uses Anthropic SDK
@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     # File storage root — Eagle data lives under this directory on the user's machine
     # Mac/Linux default: ~/Desktop/Eagle   Windows: set EAGLE_BASE_DIR=C:/Users/<you>/Desktop/Eagle
     EAGLE_BASE_DIR: str = "~/Desktop/Eagle"
+
+    # Database — derived from EAGLE_BASE_DIR if not explicitly set
+    DATABASE_URL: str = ""
+
+    # ChromaDB persist directory — derived from EAGLE_BASE_DIR if not explicitly set
+    CHROMA_PERSIST_DIR: str = ""
+
+    @model_validator(mode="after")
+    def _set_derived_paths(self) -> "Settings":
+        base = Path(self.EAGLE_BASE_DIR).expanduser()
+        if not self.DATABASE_URL:
+            db_path = base / "data" / "eagle.db"
+            self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
+        if not self.CHROMA_PERSIST_DIR:
+            self.CHROMA_PERSIST_DIR = str(base / "data" / "chroma")
+        return self
 
 
 settings = Settings()

@@ -1,19 +1,21 @@
-services:
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: eagle_db
-    environment:
-      POSTGRES_USER: eagle
-      POSTGRES_PASSWORD: eagle
-      POSTGRES_DB: eagle
-    ports:
-      - "5432:5432"
-    volumes:
-      # Mac/Linux: data persisted at ~/Desktop/Eagle/data/postgres
-      # Windows:   set EAGLE_DATA_DIR=%USERPROFILE%\Desktop\Eagle\data\postgres
-      - ${EAGLE_DATA_DIR:-${HOME}/Desktop/Eagle/data/postgres}:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eagle -d eagle"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# PostgreSQL container removed in v2 Phase 0.
+# The backend now uses SQLite (aiosqlite) + ChromaDB (embedded mode).
+# No external database service is required.
+
+# services:
+#   db:
+#     image: pgvector/pgvector:pg16
+#     container_name: eagle_db
+#     environment:
+#       POSTGRES_USER: eagle
+#       POSTGRES_PASSWORD: eagle
+#       POSTGRES_DB: eagle
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - ${EAGLE_DATA_DIR:-${HOME}/Desktop/Eagle/data/postgres}:/var/lib/postgresql/data
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U eagle -d eagle"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5

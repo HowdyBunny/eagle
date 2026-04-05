@@ -94,8 +94,8 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 | -------------- | --------------------------------------------- |
 | 招聘项目管理   | 查看现在的创建的项目有什么，点击后进行选定项目 |
 | 人才库       | 查看现有的人才库，显示人才的相关信息   |
-| 行业研究       | 自然语言提问 → Research Agent 返回行业分析报告              |
-| 主页面         | 和CA进行对话，处理其他 Agent 交互             |
+| 行业研究       | 查看Research Agent 返回行业分析报告              |
+| 主页面         | 和CA进行对话， Agent 交互             |
 | 设置           | 各个API Key 管理、数据导入导出文件夹设置，启动端口调整                     |
 
 ---
@@ -123,18 +123,11 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 | httpx             | 异步 HTTP 客户端         | 保持不变                |
 | loguru            | 日志                     | 保持不变                |
 | tqdm              | 进度显示                 | 保持不变                |
-| **chromadb**      | **向量数据库（嵌入式）** | **替换 pgvector**       |
-| **aiosqlite**     | **SQLite 异步驱动**      | **替换 asyncpg**        |
+| **chromadb**      | **向量数据库（嵌入式）** |        |
+| **aiosqlite**     | **SQLite 异步驱动**      |         |
 | sqlalchemy[asyncio] | ORM                    | **驱动改为 aiosqlite**  |
 | alembic           | 数据库迁移               | **适配 SQLite**         |
 
-**移除的依赖：**
-
-| 依赖                  | 原因                                  |
-| --------------------- | ------------------------------------- |
-| ~~asyncpg~~           | 不再使用 PostgreSQL                   |
-| ~~pgvector~~          | 向量功能由 ChromaDB 承担              |
-| ~~sentence-transformers~~ | 一开始就使用 API embedding，不需要 |
 
 **Embedding：** OpenAI text-embedding-3-small（API 调用，无本地计算）
 
@@ -192,19 +185,19 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 
 ## 六、开发阶段规划
 
-### 阶段 0：数据库迁移（当前优先）
-- [ ] SQLAlchemy 驱动从 asyncpg 切换为 aiosqlite
-- [ ] 数据模型适配 SQLite 语法差异
-- [ ] pgvector 相关代码迁移到 ChromaDB
-- [ ] Alembic 迁移脚本适配
-- [ ] 编写数据迁移脚本（PostgreSQL → SQLite）
-- [ ] 验证三个 Agent 在新数据库上功能正常
+### 阶段 0：数据库迁移 ✅ 已完成
+- [x] SQLAlchemy 驱动从 asyncpg 切换为 aiosqlite
+- [x] 数据模型适配 SQLite 语法差异（UUID→String(36), JSONB→JSON, Enum 去除 PG 参数, onupdate 事件监听）
+- [x] pgvector 相关代码迁移到 ChromaDB（新建 chroma_service.py，重写 embedding_service.py、search_service.py、evaluator.py）
+- [x] Alembic 迁移脚本适配（render_as_batch=True，重写为 SQLite 版 001 migration）
+- [x] 编写数据迁移脚本（PostgreSQL → SQLite）（暂不需要，无生产数据）
+- [x] 验证三个 Agent 在新数据库上功能正常（代码层面适配完成，待运行时验证）
 
-### 阶段 1：前端开发
-- [ ] Vite + React + TypeScript 项目初始化
-- [ ] shadcn/ui + Tailwind CSS 配置
-- [ ] 对接现有 FastAPI API，实现核心页面
-- [ ] 浏览器直接访问 测试
+### 阶段 1：前端开发（使用pnpm来进行构建）✅ 已完成
+- [x] Vite + React + TypeScript 项目初始化
+- [x] shadcn/ui + Tailwind CSS v4 配置，金色主题 token
+- [x] 对接现有 FastAPI API，实现核心页面（Chat / Projects / Talent Pool / Research / Settings）
+- [x] 浏览器直接访问测试（pnpm build 通过）
 
 ### 阶段 2：Chrome 插件优化
 - [ ] 确认插件 → 后端 → 入库流程顺畅

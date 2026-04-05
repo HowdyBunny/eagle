@@ -1,11 +1,13 @@
 import uuid
 
 from openai import AsyncOpenAI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.embedding import CandidateEmbedding, IndustryKnowledge, RequirementEmbedding
+from app.services.chroma_service import (
+    get_candidate_collection,
+    get_industry_collection,
+    get_requirement_collection,
+)
 from app.utils.logger import logger
 
 
@@ -24,68 +26,47 @@ class EmbeddingService:
         )
         return response.data[0].embedding
 
-    async def embed_candidate(self, db: AsyncSession, candidate_id: uuid.UUID, experience_summary: str) -> None:
+    async def embed_candidate(self, candidate_id: uuid.UUID, experience_summary: str) -> None:
         try:
             embedding = await self.get_embedding(experience_summary)
-
-            # Upsert: check existing
-            result = await db.execute(
-                select(CandidateEmbedding).where(CandidateEmbedding.candidate_id == candidate_id)
+            collection = get_candidate_collection()
+            collection.upsert(
+                ids=[str(candidate_id)],
+                embeddings=[embedding],
+                documents=[experience_summary],
+                metadatas=[{"candidate_id": str(candidate_id), "embedding_model_version": self.model}],
             )
-            existing = result.scalar_one_or_none()
-
-            if existing:
-                existing.embedding = embedding
-                existing.embedding_model_version = self.model
-            else:
-                db.add(CandidateEmbedding(
-                    candidate_id=candidate_id,
-                    embedding=embedding,
-                    embedding_model_version=self.model,
-                ))
-            await db.commit()
             logger.info(f"Embedded candidate {candidate_id}")
         except Exception as e:
             logger.error(f"Failed to embed candidate {candidate_id}: {e}")
 
-    async def embed_requirement(self, db: AsyncSession, project_id: uuid.UUID, requirement_text: str) -> None:
+    async def embed_requirement(self, project_id: uuid.UUID, requirement_text: str) -> None:
         try:
             embedding = await self.get_embedding(requirement_text)
-
-            result = await db.execute(
-                select(RequirementEmbedding).where(RequirementEmbedding.project_id == project_id)
+            collection = get_requirement_collection()
+            collection.upsert(
+                ids=[str(project_id)],
+                embeddings=[embedding],
+                documents=[requirement_text],
+                metadatas=[{"project_id": str(project_id), "embedding_model_version": self.model}],
             )
-            existing = result.scalar_one_or_none()
-
-            if existing:
-                existing.embedding = embedding
-                existing.embedding_model_version = self.model
-            else:
-                db.add(RequirementEmbedding(
-                    project_id=project_id,
-                    embedding=embedding,
-                    embedding_model_version=self.model,
-                ))
-            await db.commit()
             logger.info(f"Embedded requirement for project {project_id}")
         except Exception as e:
             logger.error(f"Failed to embed requirement for project {project_id}: {e}")
 
     async def embed_industry_chunk(
         self,
-        db: AsyncSession,
         ontology_id: uuid.UUID,
         content_text: str,
-    ) -> IndustryKnowledge:
+    ) -> dict:
+        chunk_id = str(uuid.uuid4())
         embedding = await self.get_embedding(content_text)
-        chunk = IndustryKnowledge(
-            source_ontology_id=ontology_id,
-            content_text=content_text,
-            embedding=embedding,
-            embedding_model_version=self.model,
+        collection = get_industry_collection()
+        collection.add(
+            ids=[chunk_id],
+            embeddings=[embedding],
+            documents=[content_text],
+            metadatas=[{"source_ontology_id": str(ontology_id), "embedding_model_version": self.model}],
         )
-        db.add(chunk)
-        await db.commit()
-        await db.refresh(chunk)
         logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
-        return chunk
+        return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}

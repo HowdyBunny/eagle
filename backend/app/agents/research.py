@@ -142,7 +142,7 @@ class ResearchAgent:
         # Embed knowledge chunks
         for chunk_text in knowledge_chunks:
             if chunk_text.strip():
-                await self.embedding_svc.embed_industry_chunk(self.db, ontology.id, chunk_text.strip())
+                await self.embedding_svc.embed_industry_chunk(ontology.id, chunk_text.strip())
 
         research = await research_service.create_research(
             db=self.db,

@@ -12,7 +12,6 @@ Uses LLM for deep semantic analysis combined with:
 import json
 import uuid
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -218,20 +217,18 @@ class EvaluatorAgent:
         if not project.requirement_profile:
             return ""
         try:
+            from app.services.chroma_service import get_industry_collection
             query_text = f"{project.jd_raw or ''} {str(project.requirement_profile)}"
             query_embedding = await self.embedding_svc.get_embedding(query_text[:2000])
 
-            stmt = text("""
-                SELECT content_text, embedding <=> CAST(:query_vec AS vector) AS distance
-                FROM industry_knowledge
-                ORDER BY embedding <=> CAST(:query_vec AS vector)
-                LIMIT 3
-            """)
-            result = await self.db.execute(stmt, {"query_vec": str(query_embedding)})
-            rows = result.fetchall()
-            if not rows:
+            collection = get_industry_collection()
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=3,
+            )
+            if not results["documents"] or not results["documents"][0]:
                 return ""
-            return "\n\n".join(row.content_text for row in rows)
+            return "\n\n".join(results["documents"][0])
         except Exception as e:
             logger.warning(f"Failed to get industry context: {e}")
             return ""

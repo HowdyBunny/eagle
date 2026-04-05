@@ -24,7 +24,7 @@ async def create_candidate(
     if candidate.experience_summary:
         from app.services.embedding_service import EmbeddingService
         svc = EmbeddingService()
-        background_tasks.add_task(svc.embed_candidate, db, candidate.id, candidate.experience_summary)
+        background_tasks.add_task(svc.embed_candidate, candidate.id, candidate.experience_summary)
     return candidate
 
 

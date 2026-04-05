@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +11,27 @@ from app.database import engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: verify DB connection
+    # Startup: ensure data directories exist
+    db_path = Path(settings.DATABASE_URL.replace("sqlite+aiosqlite:///", ""))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
+
+    # Verify DB connection
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+
+    # Warm up ChromaDB (creates collections if they don't exist)
+    from app.services.chroma_service import (
+        get_candidate_collection,
+        get_industry_collection,
+        get_requirement_collection,
+    )
+    get_candidate_collection()
+    get_industry_collection()
+    get_requirement_collection()
+
     yield
+
     # Shutdown: dispose engine
     await engine.dispose()
 

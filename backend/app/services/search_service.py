@@ -1,12 +1,12 @@
 import asyncio
 import uuid
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candidate import Candidate
-from app.models.embedding import CandidateEmbedding
 from app.schemas.candidate import CandidateResponse, CandidateSearchRequest, CandidateSearchResult
+from app.services.chroma_service import get_candidate_collection
 from app.services.embedding_service import EmbeddingService
 
 
@@ -21,14 +21,14 @@ class SearchService:
         project_id: uuid.UUID | None = None,
     ) -> list[CandidateSearchResult]:
         """
-        Hybrid search: SQL filter (hard constraints) + pgvector semantic search run in parallel.
+        Hybrid search: SQL filter (hard constraints) + ChromaDB semantic search run in parallel.
         Results are merged, deduplicated, and ranked.
         """
         sql_task = asyncio.create_task(self._sql_search(db, request))
 
         vector_task = None
         if request.query:
-            vector_task = asyncio.create_task(self._vector_search(db, request.query, limit=request.limit * 2))
+            vector_task = asyncio.create_task(self._vector_search(request.query, limit=request.limit * 2))
 
         sql_ids = await sql_task
         vector_results: dict[uuid.UUID, float] = {}
@@ -78,23 +78,21 @@ class SearchService:
         result = await db.execute(query)
         return {row[0] for row in result.fetchall()}
 
-    async def _vector_search(
-        self, db: AsyncSession, query_text: str, limit: int = 40
-    ) -> dict[uuid.UUID, float]:
+    async def _vector_search(self, query_text: str, limit: int = 40) -> dict[uuid.UUID, float]:
         query_embedding = await self.embedding_svc.get_embedding(query_text)
+        collection = get_candidate_collection()
 
-        # pgvector cosine distance: <=> (lower = more similar)
-        stmt = text("""
-            SELECT candidate_id, embedding <=> CAST(:query_vec AS vector) AS distance
-            FROM candidate_embeddings
-            ORDER BY embedding <=> CAST(:query_vec AS vector)
-            LIMIT :limit
-        """)
-        result = await db.execute(
-            stmt,
-            {"query_vec": str(query_embedding), "limit": limit},
+        # ChromaDB query returns cosine distance (lower = more similar), same as pgvector <=>
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=limit,
         )
-        return {row.candidate_id: row.distance for row in result.fetchall()}
+
+        output: dict[uuid.UUID, float] = {}
+        if results["ids"] and results["ids"][0]:
+            for id_str, distance in zip(results["ids"][0], results["distances"][0]):
+                output[uuid.UUID(id_str)] = distance
+        return output
 
 
 def _compute_combined_score(sql_matched: bool, vector_score: float | None) -> float:

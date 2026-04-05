@@ -23,7 +23,7 @@ async def create_project(
     if project.requirement_profile:
         from app.services.embedding_service import EmbeddingService
         svc = EmbeddingService()
-        background_tasks.add_task(svc.embed_requirement, db, project.id, str(project.requirement_profile))
+        background_tasks.add_task(svc.embed_requirement, project.id, str(project.requirement_profile))
     return project
 
 
@@ -64,5 +64,5 @@ async def update_project(
     if data.requirement_profile is not None:
         from app.services.embedding_service import EmbeddingService
         svc = EmbeddingService()
-        background_tasks.add_task(svc.embed_requirement, db, project.id, str(project.requirement_profile))
+        background_tasks.add_task(svc.embed_requirement, project.id, str(project.requirement_profile))
     return project
