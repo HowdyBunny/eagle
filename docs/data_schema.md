@@ -10,7 +10,7 @@ update_preference、change_project_context
 
 ![ER](/Users/howdybunny/Desktop/MyApp/eagle/docs/ER.png)
 
-## 七张核心表的设计逻辑
+## 七张 SQL 表的设计逻辑
 
 **`projects`** — 每个猎头任务就是一个项目。`jd_raw` 存客户原始的职位描述文本，`requirement_profile` 是CA通过需求澄清后生成的结构化JSON画像（包含硬性条件、软性条件、优先级等）。`mode` 记录当前是"精准模式"还是"探索模式"。这张表是整个系统的锚点，几乎所有其他表都关联到它。
 
@@ -26,14 +26,16 @@ update_preference、change_project_context
 
 **`conversation_logs`** — CA对话层的完整记录。`role` 是"hunter"或"assistant"，`intent_json` 记录CA从每轮对话中解析出的结构化意图（比如`{action: "search_talent_pool", filters: {...}}`）。这张表既用于审计追溯，也用于CA在长对话中保持上下文。
 
-## 向量数据库（不在SQL中，单独的Milvus/Pinecone）
+## 向量数据库（ChromaDB，本地文件存储）
 
-需要存三种collection：
+存储路径：`~/Desktop/Eagle/data/chroma/`
 
-**candidate_embeddings** — 每个候选人的工作经历embedding，关联candidate_id。EA做软匹配时查询这个collection。
+共 3 个 ChromaDB collection：
 
-**industry_knowledge** — RA产出的行业报告分段embedding。EA做"软性理解"（比如发现"光伏逆变器"和"储能"语义相近）时查询这个。
+**candidate_embeddings** — 每个候选人的工作经历 embedding，关联 candidate_id。EA 做软匹配时查询这个 collection。
 
-**requirement_embeddings** — 项目需求画像的embedding。用于将来做"这个新入库的候选人可能适合你的B项目"的反向推荐。
+**industry_knowledge** — RA 产出的行业报告分段 embedding，关联 source_ontology_id。EA 做"软性理解"（比如发现"光伏逆变器"和"储能"语义相近）时查询这个。
 
-所有三个collection都要记录embedding模型的版本号，方便将来迁移。
+**requirement_embeddings** — 项目需求画像的 embedding，关联 project_id。用于将来做"这个新入库的候选人可能适合你的 B 项目"的反向推荐。
+
+所有三个 collection 的 metadata 中都记录了 `embedding_model_version`，方便将来迁移。

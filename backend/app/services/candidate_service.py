@@ -39,7 +39,10 @@ async def create_candidate(db: AsyncSession, data: CandidateCreate) -> Candidate
 
 async def get_candidate(db: AsyncSession, candidate_id: uuid.UUID) -> Candidate | None:
     result = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
-    return result.scalar_one_or_none()
+    candidate = result.scalar_one_or_none()
+    if candidate:
+        _refresh_confidence(candidate)
+    return candidate
 
 
 async def list_candidates(
@@ -66,7 +69,19 @@ async def list_candidates(
 
     query = query.order_by(Candidate.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
-    return list(result.scalars().all())
+    candidates = list(result.scalars().all())
+    for c in candidates:
+        _refresh_confidence(c)
+    return candidates
+
+
+def _refresh_confidence(candidate: Candidate) -> None:
+    """Recompute confidence score using current time (time-decay is dynamic)."""
+    tenure_months = _extract_tenure_months(candidate.raw_structured_data)
+    candidate.confidence_score = calculate_confidence_score(
+        created_at=candidate.created_at,
+        current_tenure_months=tenure_months,
+    )
 
 
 def _extract_tenure_months(raw_data: dict | None) -> float | None:

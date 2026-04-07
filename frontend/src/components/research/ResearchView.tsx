@@ -107,7 +107,7 @@ function OntologyDoc({ ontology }: { ontology: OntologyResponse }) {
 
 export default function ResearchView() {
   const { currentProjectId, currentProject } = useAppStore()
-  const { records, selectedRecordId, loading, fetchRecords, selectRecord } = useResearchStore()
+  const { records, selectedRecordId, loading, isResearching, fetchRecords, selectRecord } = useResearchStore()
   const [showDialog, setShowDialog] = useState(false)
   const navigate = useNavigate()
 
@@ -149,9 +149,19 @@ export default function ResearchView() {
             </button>
           </div>
 
+          {isResearching && (
+            <div className="mb-3 px-3 py-3 rounded-lg bg-primary/5 border border-primary/20 animate-pulse">
+              <div className="flex items-center gap-2 mb-1">
+                <LoadingSpinner size="sm" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">调研进行中…</p>
+              </div>
+              <p className="text-xs text-secondary">Research Agent 正在搜索和分析，预计 1-3 分钟</p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-8"><LoadingSpinner /></div>
-          ) : records.length === 0 ? (
+          ) : records.length === 0 && !isResearching ? (
             <div className="text-center py-8">
               <p className="text-sm text-secondary mb-3">暂无调研报告</p>
               <button

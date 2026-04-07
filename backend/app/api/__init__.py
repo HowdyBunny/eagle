@@ -9,6 +9,8 @@ from app.api import (
     preferences,
     projects,
     research,
+    settings,
+    ws_bootstrap,
 )
 
 
@@ -21,3 +23,5 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(preferences.router, prefix="/api")
     app.include_router(research.router, prefix="/api")
     app.include_router(ontology.router, prefix="/api")
+    app.include_router(settings.router, prefix="/api")
+    app.include_router(ws_bootstrap.router, prefix="/api")

@@ -12,17 +12,17 @@ from app.utils.logger import logger
 
 
 class EmbeddingService:
-    def __init__(self):
-        self.client = AsyncOpenAI(
+    def _get_client(self) -> AsyncOpenAI:
+        return AsyncOpenAI(
             api_key=settings.EMBEDDING_API_KEY,
-            base_url=settings.EMBEDDING_BASE_URL,  # None = OpenAI official; include /v1 for compatible endpoints
+            base_url=settings.EMBEDDING_BASE_URL,
         )
-        self.model = settings.EMBEDDING_MODEL
 
     async def get_embedding(self, text: str) -> list[float]:
-        response = await self.client.embeddings.create(
+        client = self._get_client()
+        response = await client.embeddings.create(
             input=text,
-            model=self.model,
+            model=settings.EMBEDDING_MODEL,
         )
         return response.data[0].embedding
 
@@ -34,7 +34,7 @@ class EmbeddingService:
                 ids=[str(candidate_id)],
                 embeddings=[embedding],
                 documents=[experience_summary],
-                metadatas=[{"candidate_id": str(candidate_id), "embedding_model_version": self.model}],
+                metadatas=[{"candidate_id": str(candidate_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
             )
             logger.info(f"Embedded candidate {candidate_id}")
         except Exception as e:
@@ -48,7 +48,7 @@ class EmbeddingService:
                 ids=[str(project_id)],
                 embeddings=[embedding],
                 documents=[requirement_text],
-                metadatas=[{"project_id": str(project_id), "embedding_model_version": self.model}],
+                metadatas=[{"project_id": str(project_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
             )
             logger.info(f"Embedded requirement for project {project_id}")
         except Exception as e:
@@ -66,7 +66,7 @@ class EmbeddingService:
             ids=[chunk_id],
             embeddings=[embedding],
             documents=[content_text],
-            metadatas=[{"source_ontology_id": str(ontology_id), "embedding_model_version": self.model}],
+            metadatas=[{"source_ontology_id": str(ontology_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
         )
         logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
         return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}

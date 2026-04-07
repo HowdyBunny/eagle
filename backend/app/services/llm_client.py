@@ -48,19 +48,25 @@ class LLMClient:
     """
     Provider-agnostic LLM client. Callers always pass messages in OpenAI format
     (system as {"role": "system", "content": ...} in the messages list).
+
+    The client is created fresh on each call so that hot-updated settings
+    (via PUT /api/settings) take effect without restarting the server.
     """
 
-    def __init__(self):
-        self.provider = settings.LLM_PROVIDER.lower()
+    @property
+    def provider(self) -> str:
+        return settings.LLM_PROVIDER.lower()
+
+    def _get_client(self):
         if self.provider == "anthropic":
             import anthropic
-            self._client = anthropic.AsyncAnthropic(
+            return anthropic.AsyncAnthropic(
                 api_key=settings.LLM_API_KEY,
                 base_url=settings.LLM_BASE_URL,
             )
         else:
             from openai import AsyncOpenAI
-            self._client = AsyncOpenAI(
+            return AsyncOpenAI(
                 api_key=settings.LLM_API_KEY,
                 base_url=settings.LLM_BASE_URL,
             )
@@ -109,7 +115,7 @@ class LLMClient:
         msgs = list(messages)
 
         while True:
-            response = await self._client.chat.completions.create(
+            response = await self._get_client().chat.completions.create(
                 model=settings.LLM_MODEL,
                 max_tokens=4096,
                 messages=msgs,
@@ -156,7 +162,7 @@ class LLMClient:
         return reply_text, actions_taken, intent_json
 
     async def _simple_chat_openai(self, messages: list[dict], max_tokens: int) -> str:
-        response = await self._client.chat.completions.create(
+        response = await self._get_client().chat.completions.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             messages=messages,
@@ -165,7 +171,7 @@ class LLMClient:
 
     async def _research_chat_openai(self, messages: list[dict], max_tokens: int) -> str:
         # Responses API supports web_search natively; input accepts the same message format
-        response = await self._client.responses.create(
+        response = await self._get_client().responses.create(
             model=settings.LLM_MODEL,
             input=messages,
             tools=[{
@@ -187,7 +193,7 @@ class LLMClient:
         reply_text = ""
 
         while True:
-            response = await self._client.messages.create(
+            response = await self._get_client().messages.create(
                 model=settings.LLM_MODEL,
                 max_tokens=4096,
                 system=system,
@@ -227,7 +233,7 @@ class LLMClient:
 
     async def _simple_chat_anthropic(self, messages: list[dict], max_tokens: int) -> str:
         system, msgs = _extract_system(messages)
-        response = await self._client.messages.create(
+        response = await self._get_client().messages.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             system=system,
@@ -237,7 +243,7 @@ class LLMClient:
 
     async def _research_chat_anthropic(self, messages: list[dict], max_tokens: int) -> str:
         system, msgs = _extract_system(messages)
-        response = await self._client.messages.create(
+        response = await self._get_client().messages.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             system=system,

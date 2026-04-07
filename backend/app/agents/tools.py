@@ -140,6 +140,32 @@ CA_TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "update_project",
+            "description": (
+                "Update the current project's metadata. "
+                "Use this as the FIRST action when the project's client_name is '待 CA 解析' — "
+                "parse the hunter's message to extract real client name, project name, and "
+                "requirement profile, then call this tool to replace the placeholders. "
+                "Also use this when the hunter asks to modify project details."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "UUID of the project to update"},
+                    "client_name": {"type": "string", "description": "Real client company name"},
+                    "project_name": {"type": "string", "description": "Descriptive project name, e.g. '某公司-技术VP'"},
+                    "requirement_profile": {
+                        "type": "object",
+                        "description": "Structured requirement profile JSON (hard + soft requirements)",
+                    },
+                },
+                "required": ["project_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "change_project_context",
             "description": "Switch the active project context. Use when hunter mentions switching to a different project.",
             "parameters": {
@@ -159,8 +185,9 @@ CA_TOOLS: list[dict] = [
 # ──────────────────────────────────────────────
 
 class ToolExecutor:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, current_project_id: uuid.UUID | None = None):
         self.db = db
+        self.current_project_id = current_project_id
         self.search_svc = SearchService()
 
     async def execute(self, tool_name: str, arguments: dict) -> Any:
@@ -171,6 +198,18 @@ class ToolExecutor:
 
     async def _handle_create_project(self, client_name: str, project_name: str, jd_raw: str | None = None, mode: str = "precise") -> dict:
         from app.models.project import ProjectMode
+        # Guard: if the current project is a stub created by the frontend,
+        # update it in place rather than creating a duplicate.
+        if self.current_project_id:
+            current = await project_service.get_project(self.db, self.current_project_id)
+            if current and current.client_name == "待 CA 解析":
+                data = ProjectUpdate(
+                    client_name=client_name,
+                    project_name=project_name,
+                    jd_raw=jd_raw,
+                )
+                project = await project_service.update_project(self.db, self.current_project_id, data)
+                return {"project_id": str(project.id), "project_name": project.project_name, "status": "updated_stub"}
         data = ProjectCreate(
             client_name=client_name,
             project_name=project_name,
@@ -180,7 +219,10 @@ class ToolExecutor:
         project = await project_service.create_project(self.db, data)
         return {"project_id": str(project.id), "project_name": project.project_name, "status": "created"}
 
-    async def _handle_clarify_requirement(self, project_id: str, requirement_profile: dict) -> dict:
+    async def _handle_clarify_requirement(self, project_id: str, requirement_profile: dict | None = None) -> dict:
+        if not requirement_profile:
+            return {"error": "requirement_profile is required"}
+
         data = ProjectUpdate(requirement_profile=requirement_profile)
         project = await project_service.update_project(self.db, uuid.UUID(project_id), data)
         if not project:
@@ -262,6 +304,28 @@ class ToolExecutor:
         )
         log = await preference_service.create_preference(self.db, uuid.UUID(project_id), data)
         return {"preference_id": str(log.id), "status": "preference_recorded"}
+
+    async def _handle_update_project(
+        self,
+        project_id: str,
+        client_name: str | None = None,
+        project_name: str | None = None,
+        requirement_profile: dict | None = None,
+    ) -> dict:
+        data = ProjectUpdate(
+            client_name=client_name,
+            project_name=project_name,
+            requirement_profile=requirement_profile,
+        )
+        project = await project_service.update_project(self.db, uuid.UUID(project_id), data)
+        if not project:
+            return {"error": f"Project {project_id} not found"}
+        return {
+            "project_id": project_id,
+            "client_name": project.client_name,
+            "project_name": project.project_name,
+            "status": "project_updated",
+        }
 
     async def _handle_change_project_context(self, project_id: str) -> dict:
         project = await project_service.get_project(self.db, uuid.UUID(project_id))

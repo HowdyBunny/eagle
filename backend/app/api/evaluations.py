@@ -83,6 +83,29 @@ async def list_project_candidates(
     return await evaluation_service.list_project_candidates(db, project_id, sort_by_score=sort_by_score)
 
 
+@router.post("/{project_id}/candidates/{candidate_id}/link", status_code=status.HTTP_201_CREATED)
+async def link_candidate_to_project(
+    project_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    """Link a candidate to a project without triggering evaluation."""
+    project = await project_service.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    candidate = await candidate_service.get_candidate(db, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    pc = await evaluation_service.get_or_create_project_candidate(db, project_id, candidate_id)
+    return {
+        "project_id": str(project_id),
+        "candidate_id": str(candidate_id),
+        "status": pc.status.value if hasattr(pc.status, 'value') else str(pc.status),
+        "message": "Candidate linked to project",
+    }
+
+
 @router.patch("/{project_id}/candidates/{candidate_id}", response_model=ProjectCandidateResponse)
 async def update_project_candidate(
     project_id: uuid.UUID,

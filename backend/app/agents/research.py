@@ -154,8 +154,7 @@ class ResearchAgent:
         return research
 
     def _parse_response(self, full_text: str, topic: str) -> tuple[str, dict, list[str]]:
-        markdown_report = ""
-        ontology_data = {
+        default_ontology = {
             "industry": topic,
             "concept": topic,
             "synonyms": [],
@@ -165,48 +164,24 @@ class ResearchAgent:
             "skill_relations": {},
             "jargon": {},
         }
-        knowledge_chunks: list[str] = []
-
         try:
-            if "---MARKDOWN_REPORT---" in full_text:
-                parts = full_text.split("---MARKDOWN_REPORT---")
-                remaining = parts[1] if len(parts) > 1 else ""
+            # Strip potential markdown code fences wrapping the JSON
+            text = full_text.strip()
+            if text.startswith("```"):
+                text = text.split("```", 2)[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.rsplit("```", 1)[0]
 
-                if "---ONTOLOGY_JSON---" in remaining:
-                    md_part, rest = remaining.split("---ONTOLOGY_JSON---", 1)
-                    markdown_report = md_part.strip()
+            data = json.loads(text.strip())
+            markdown_report = data.get("markdown_report", "")
+            ontology_data = data.get("ontology", default_ontology)
+            knowledge_chunks = data.get("knowledge_chunks", [])
+            return markdown_report, ontology_data, knowledge_chunks
 
-                    if "---KNOWLEDGE_CHUNKS---" in rest:
-                        json_part, chunks_part = rest.split("---KNOWLEDGE_CHUNKS---", 1)
-                        json_text = json_part.strip()
-                        if json_text.startswith("```"):
-                            json_text = json_text.split("```")[1]
-                            if json_text.startswith("json"):
-                                json_text = json_text[4:]
-                            json_text = json_text.rsplit("```", 1)[0]
-                        try:
-                            ontology_data = json.loads(json_text.strip())
-                        except json.JSONDecodeError:
-                            logger.warning("RA: Failed to parse ontology JSON, using defaults")
-
-                        knowledge_chunks = [
-                            c for c in chunks_part.split("===CHUNK_SEPARATOR===") if c.strip()
-                        ]
-                    else:
-                        try:
-                            ontology_data = json.loads(rest.strip())
-                        except json.JSONDecodeError:
-                            pass
-            else:
-                markdown_report = full_text
-                knowledge_chunks = [full_text]
-
-        except Exception as e:
-            logger.warning(f"RA: Error parsing response: {e}, falling back to raw text")
-            markdown_report = full_text
-            knowledge_chunks = [full_text]
-
-        return markdown_report, ontology_data, knowledge_chunks
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"RA: Failed to parse JSON response: {e}, using raw text as fallback")
+            return full_text, default_ontology, [full_text]
 
     async def _save_report(self, project_id: uuid.UUID, topic: str, content: str) -> str:
         project = await project_service.get_project(self.db, project_id)

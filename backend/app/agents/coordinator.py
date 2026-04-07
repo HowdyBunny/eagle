@@ -59,6 +59,14 @@ CA_SYSTEM_PROMPT = """你是 Eagle 系统的 Coordinator Agent，一个专为猎
 - 不要说"好的，我来帮您..."之类的废话，直接行动或直接追问
 - 展示候选人时用简洁的要点格式，不要写长段落
 
+## Stub 项目处理规则
+当系统在对话开始时传入的项目 `client_name` 为 "待 CA 解析" 时，说明这是前端自动创建的占位项目。
+你的第一件事必须是：
+1. 从猎头的消息中解析出真实的客户名称、职位名称、需求画像
+2. 立刻调用 `update_project` 工具将占位信息替换为真实信息
+3. 之后再正常继续需求澄清流程
+注意：此时不要调用 `create_project`，项目已经存在，只需更新。
+
 ## 工具使用规则
 - 创建项目前确认基本信息已足够，有足够信息就立刻调用工具，不要过度确认
 - 搜索前确认有基本的搜索条件，有足够信息就立刻调用工具，不要过度确认
@@ -125,7 +133,6 @@ CA：好，我让调研模块去搜索储能行业的技术栈、核心岗位和
 class CoordinatorAgent:
     def __init__(self, db: AsyncSession):
         self.llm = LLMClient()
-        self.tool_executor = ToolExecutor(db)
         self.db = db
 
     async def chat(self, project_id: uuid.UUID, user_message: str) -> ChatResponse:
@@ -156,9 +163,10 @@ class CoordinatorAgent:
             self.db, project_id, ConversationRole.HUNTER, user_message
         )
 
-        # 5. Run agentic tool-use loop
+        # 5. Run agentic tool-use loop (pass project_id so ToolExecutor can guard stub duplication)
+        tool_executor = ToolExecutor(self.db, current_project_id=project_id)
         reply_text, actions_taken, intent_json = await self.llm.agentic_loop(
-            messages, CA_TOOLS, self.tool_executor
+            messages, CA_TOOLS, tool_executor
         )
 
         # 6. Persist assistant reply

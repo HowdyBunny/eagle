@@ -3,6 +3,7 @@ import { Eye, EyeOff, Key, Sparkles, Database, Server, HelpCircle, Save, RotateC
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore, type SettingsState } from '@/stores/app-store'
 import { checkHealth } from '@/lib/api/health'
+import { updateRuntimeSettings } from '@/lib/api/settings'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Reusable primitives
@@ -190,57 +191,6 @@ export default function SettingsView() {
       <div className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
 
-          {/* LLM Section */}
-          <SettingsCard
-            icon={<Sparkles size={16} className="text-primary" />}
-            title="LLM 配置"
-            subtitle="Coordinator / Research / Evaluator Agent 共用"
-            tooltip={
-              <div className="space-y-1.5">
-                <p><strong>LLM Provider</strong>：SDK 类型。openai 走 chat.completions + responses API；anthropic 走 messages API。</p>
-                <p><strong>LLM API Key</strong>：模型调用密钥。</p>
-                <p><strong>LLM Model</strong>：模型名称，例如 gpt-4o、claude-sonnet-4-5。</p>
-                <p><strong>LLM Base URL</strong>：第三方代理地址。openai 必须以 /v1 结尾；anthropic 不要带 /v1。留空使用官方默认。</p>
-                <p><strong>Web Search Context Size</strong>：RA 网页搜索上下文大小（仅 openai Responses API 支持）。</p>
-                <p className="text-primary pt-1">💡 LLM 和 Embedding 可以使用同一个 Provider 和 API Key。</p>
-              </div>
-            }
-            saving={saving === 'llm'}
-            status={status.llm}
-            onSave={() => saveSection('llm', llm)}
-          >
-            <Field label="LLM Provider">
-              <select
-                value={llm.llmProvider}
-                onChange={(e) => setLlm({ ...llm, llmProvider: e.target.value as 'openai' | 'anthropic' })}
-                className={inputClass}
-              >
-                <option value="openai">OpenAI (chat.completions + responses)</option>
-                <option value="anthropic">Anthropic (messages)</option>
-              </select>
-            </Field>
-            <Field label="LLM API Key">
-              <SecretInput value={llm.llmApiKey} onChange={(v) => setLlm({ ...llm, llmApiKey: v })} placeholder="sk-..." />
-            </Field>
-            <Field label="LLM Model" hint="例如：gpt-4o、gpt-4o-mini、claude-sonnet-4-5">
-              <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-4o" className={monoInputClass} />
-            </Field>
-            <Field label="LLM Base URL" hint="留空走官方端点。openai 带 /v1，anthropic 不带。">
-              <input value={llm.llmBaseUrl} onChange={(e) => setLlm({ ...llm, llmBaseUrl: e.target.value })} placeholder="https://your-provider.example.com/v1" className={monoInputClass} />
-            </Field>
-            <Field label="Web Search Context Size">
-              <select
-                value={llm.webSearchContextSize}
-                onChange={(e) => setLlm({ ...llm, webSearchContextSize: e.target.value as 'low' | 'medium' | 'high' })}
-                className={inputClass}
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
-            </Field>
-          </SettingsCard>
-
           {/* Backend Auth */}
           <SettingsCard
             icon={<Key size={16} className="text-primary" />}
@@ -265,6 +215,67 @@ export default function SettingsView() {
             </Field>
           </SettingsCard>
 
+          {/* LLM Section */}
+          <SettingsCard
+            icon={<Sparkles size={16} className="text-primary" />}
+            title="LLM 配置"
+            subtitle="Coordinator / Research / Evaluator Agent 共用"
+            tooltip={
+              <div className="space-y-1.5">
+                <p><strong>LLM Provider</strong>：SDK 类型。openai 走 chat.completions + responses API；anthropic 走 messages API。</p>
+                <p><strong>LLM API Key</strong>：模型调用密钥。</p>
+                <p><strong>LLM Model</strong>：模型名称，例如 gpt-4o、claude-sonnet-4-5。</p>
+                <p><strong>LLM Base URL</strong>：第三方代理地址。openai 必须以 /v1 结尾；anthropic 不要带 /v1。留空使用官方默认。</p>
+                <p><strong>Web Search Context Size</strong>：RA 网页搜索上下文大小（仅 openai Responses API 支持）。</p>
+                <p className="text-primary pt-1">💡 LLM 和 Embedding 可以使用同一个 Provider 和 API Key。</p>
+              </div>
+            }
+            saving={saving === 'llm'}
+            status={status.llm}
+            onSave={() => saveSection('llm', llm, async () => {
+              await updateRuntimeSettings({
+                llm_provider: llm.llmProvider,
+                llm_api_key: llm.llmApiKey,
+                llm_model: llm.llmModel,
+                llm_base_url: llm.llmBaseUrl || undefined,
+                web_search_context_size: llm.webSearchContextSize,
+              })
+            })}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="LLM Provider">
+                <select
+                  value={llm.llmProvider}
+                  onChange={(e) => setLlm({ ...llm, llmProvider: e.target.value as 'openai' | 'anthropic' })}
+                  className={inputClass}
+                >
+                  <option value="openai">OpenAI (chat.completions + responses)</option>
+                  <option value="anthropic">Anthropic (messages)</option>
+                </select>
+              </Field>
+              <Field label="LLM Model" hint="例如：gpt-4o、claude-sonnet-4-5">
+                <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-4o" className={monoInputClass} />
+              </Field>
+            </div>
+            <Field label="LLM API Key">
+              <SecretInput value={llm.llmApiKey} onChange={(v) => setLlm({ ...llm, llmApiKey: v })} placeholder="sk-..." />
+            </Field>
+            <Field label="LLM Base URL" hint="留空走官方端点。openai 带 /v1，anthropic 不带。">
+              <input value={llm.llmBaseUrl} onChange={(e) => setLlm({ ...llm, llmBaseUrl: e.target.value })} placeholder="https://your-provider.example.com/v1" className={monoInputClass} />
+            </Field>
+            <Field label="Web Search Context Size">
+              <select
+                value={llm.webSearchContextSize}
+                onChange={(e) => setLlm({ ...llm, webSearchContextSize: e.target.value as 'low' | 'medium' | 'high' })}
+                className={inputClass}
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </Field>
+          </SettingsCard>
+
           {/* Embedding */}
           <SettingsCard
             icon={<Database size={16} className="text-primary" />}
@@ -281,23 +292,32 @@ export default function SettingsView() {
             }
             saving={saving === 'emb'}
             status={status.emb}
-            onSave={() => saveSection('emb', emb)}
+            onSave={() => saveSection('emb', emb, async () => {
+              await updateRuntimeSettings({
+                embedding_api_key: emb.embeddingApiKey,
+                embedding_model: emb.embeddingModel,
+                embedding_base_url: emb.embeddingBaseUrl || undefined,
+                embedding_dimensions: emb.embeddingDimensions,
+              })
+            })}
           >
             <Field label="Embedding API Key">
               <SecretInput value={emb.embeddingApiKey} onChange={(v) => setEmb({ ...emb, embeddingApiKey: v })} placeholder="sk-..." />
             </Field>
-            <Field label="Embedding Model">
-              <input value={emb.embeddingModel} onChange={(e) => setEmb({ ...emb, embeddingModel: e.target.value })} placeholder="text-embedding-3-small" className={monoInputClass} />
-            </Field>
-            <Field label="Embedding Dimensions" hint="必须与模型输出维度一致，修改后需重建向量库">
-              <input
-                type="number"
-                value={emb.embeddingDimensions}
-                onChange={(e) => setEmb({ ...emb, embeddingDimensions: Number(e.target.value) || 0 })}
-                placeholder="1536"
-                className={monoInputClass}
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Embedding Model">
+                <input value={emb.embeddingModel} onChange={(e) => setEmb({ ...emb, embeddingModel: e.target.value })} placeholder="text-embedding-3-small" className={monoInputClass} />
+              </Field>
+              <Field label="Embedding Dimensions" hint="必须与模型输出维度一致，修改后需重建向量库">
+                <input
+                  type="number"
+                  value={emb.embeddingDimensions}
+                  onChange={(e) => setEmb({ ...emb, embeddingDimensions: Number(e.target.value) || 0 })}
+                  placeholder="1536"
+                  className={monoInputClass}
+                />
+              </Field>
+            </div>
             <Field label="Embedding Base URL" hint="必须以 /v1 结尾。留空走 OpenAI 官方。">
               <input value={emb.embeddingBaseUrl} onChange={(e) => setEmb({ ...emb, embeddingBaseUrl: e.target.value })} placeholder="https://your-provider.example.com/v1" className={monoInputClass} />
             </Field>
