@@ -11,7 +11,7 @@ export default function AppShell() {
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0 bg-surface relative">
         <TopBar />
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 overflow-y-auto relative [scrollbar-gutter:stable]">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

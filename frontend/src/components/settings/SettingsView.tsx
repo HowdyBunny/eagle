@@ -224,7 +224,7 @@ export default function SettingsView() {
               <div className="space-y-1.5">
                 <p><strong>LLM Provider</strong>：SDK 类型。openai 走 chat.completions + responses API；anthropic 走 messages API。</p>
                 <p><strong>LLM API Key</strong>：模型调用密钥。</p>
-                <p><strong>LLM Model</strong>：模型名称，例如 gpt-4o、claude-sonnet-4-5。</p>
+                <p><strong>LLM Model</strong>：模型名称，例如 gpt-5.2、claude-sonnet-4-6。</p>
                 <p><strong>LLM Base URL</strong>：第三方代理地址。openai 必须以 /v1 结尾；anthropic 不要带 /v1。留空使用官方默认。</p>
                 <p><strong>Web Search Context Size</strong>：RA 网页搜索上下文大小（仅 openai Responses API 支持）。</p>
                 <p className="text-primary pt-1">💡 LLM 和 Embedding 可以使用同一个 Provider 和 API Key。</p>
@@ -253,8 +253,8 @@ export default function SettingsView() {
                   <option value="anthropic">Anthropic (messages)</option>
                 </select>
               </Field>
-              <Field label="LLM Model" hint="例如：gpt-4o、claude-sonnet-4-5">
-                <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-4o" className={monoInputClass} />
+              <Field label="LLM Model" hint="例如：gpt-5.2、claude-sonnet-4-6">
+                <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-5.2" className={monoInputClass} />
               </Field>
             </div>
             <Field label="LLM API Key">

@@ -66,3 +66,14 @@ async def update_project(
         svc = EmbeddingService()
         background_tasks.add_task(svc.embed_requirement, project.id, str(project.requirement_profile))
     return project
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    deleted = await project_service.delete_project(db, project_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")

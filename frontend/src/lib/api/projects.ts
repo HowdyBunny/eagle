@@ -20,3 +20,7 @@ export async function updateProject(projectId: string, body: ProjectUpdate): Pro
   const { data } = await apiClient.patch(`/projects/${projectId}`, body)
   return data
 }
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}`)
+}

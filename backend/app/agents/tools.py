@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.candidate import CandidateSearchRequest
 from app.schemas.preference import PreferenceCreate
-from app.schemas.project import ProjectCreate, ProjectUpdate
+from app.schemas.project import ProjectUpdate
 from app.services import (
     candidate_service,
     preference_service,
@@ -28,29 +28,8 @@ CA_TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "create_project",
-            "description": "Create a new headhunting project for a client. Use when the hunter explicitly wants to start a new project.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "client_name": {"type": "string", "description": "Name of the client company"},
-                    "project_name": {"type": "string", "description": "Descriptive name for the project"},
-                    "jd_raw": {"type": "string", "description": "Raw job description text from the client"},
-                    "mode": {
-                        "type": "string",
-                        "enum": ["precise", "explore"],
-                        "description": "precise: ask structured questions first; explore: search immediately and refine via feedback",
-                    },
-                },
-                "required": ["client_name", "project_name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "clarify_requirement",
-            "description": "Update the project's requirement_profile with clarified structured requirements. Call after gathering enough info from the hunter.",
+            "description": "Update the project's requirement_profile with clarified structured requirements. Save the finalized structured requirement profile to the project.ONLY call this when you have collected enough information to fill all fields.Do NOT call this during the clarification process itself.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -106,8 +85,8 @@ CA_TOOLS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "UUID of the project"},
-                    "topic": {"type": "string", "description": "Industry or topic to research (e.g. '储能行业', '大模型部署')"},
-                    "additional_context": {"type": "string", "description": "Optional context about what specifically to focus on"},
+                    "topic": {"type": "string", "description": "Industry or role direction to research. Keep concise: industry + sub-field, e.g. '高端医疗影像设备（CT/MRI）研发' or '储能行业电池管理系统'"},
+                    "additional_context": {"type": "string", "description": "Optional 1-2 sentence focus hint, e.g. '重点关注外资背景候选人的技能路径和关键岗位'. Do NOT paste full JDs or long requirement lists."},
                 },
                 "required": ["project_id", "topic"],
             },
@@ -163,20 +142,6 @@ CA_TOOLS: list[dict] = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "change_project_context",
-            "description": "Switch the active project context. Use when hunter mentions switching to a different project.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "project_id": {"type": "string", "description": "UUID of the project to switch to"},
-                },
-                "required": ["project_id"],
-            },
-        },
-    },
 ]
 
 
@@ -196,29 +161,6 @@ class ToolExecutor:
             return {"error": f"Unknown tool: {tool_name}"}
         return await handler(**arguments)
 
-    async def _handle_create_project(self, client_name: str, project_name: str, jd_raw: str | None = None, mode: str = "precise") -> dict:
-        from app.models.project import ProjectMode
-        # Guard: if the current project is a stub created by the frontend,
-        # update it in place rather than creating a duplicate.
-        if self.current_project_id:
-            current = await project_service.get_project(self.db, self.current_project_id)
-            if current and current.client_name == "待 CA 解析":
-                data = ProjectUpdate(
-                    client_name=client_name,
-                    project_name=project_name,
-                    jd_raw=jd_raw,
-                )
-                project = await project_service.update_project(self.db, self.current_project_id, data)
-                return {"project_id": str(project.id), "project_name": project.project_name, "status": "updated_stub"}
-        data = ProjectCreate(
-            client_name=client_name,
-            project_name=project_name,
-            jd_raw=jd_raw,
-            mode=ProjectMode(mode),
-        )
-        project = await project_service.create_project(self.db, data)
-        return {"project_id": str(project.id), "project_name": project.project_name, "status": "created"}
-
     async def _handle_clarify_requirement(self, project_id: str, requirement_profile: dict | None = None) -> dict:
         if not requirement_profile:
             return {"error": "requirement_profile is required"}
@@ -227,6 +169,14 @@ class ToolExecutor:
         project = await project_service.update_project(self.db, uuid.UUID(project_id), data)
         if not project:
             return {"error": f"Project {project_id} not found"}
+
+        # Re-embed the updated requirement profile so vector search stays current.
+        from app.services.embedding_service import EmbeddingService
+        import asyncio
+        asyncio.create_task(
+            EmbeddingService().embed_requirement(project.id, str(requirement_profile))
+        )
+
         return {"project_id": project_id, "status": "requirement_updated"}
 
     async def _handle_search_talent_pool(
@@ -327,12 +277,3 @@ class ToolExecutor:
             "status": "project_updated",
         }
 
-    async def _handle_change_project_context(self, project_id: str) -> dict:
-        project = await project_service.get_project(self.db, uuid.UUID(project_id))
-        if not project:
-            return {"error": f"Project {project_id} not found"}
-        return {
-            "project_id": project_id,
-            "project_name": project.project_name,
-            "status": "context_switched",
-        }

@@ -9,6 +9,7 @@ interface ProjectState {
   fetchProjects: () => Promise<void>
   createProject: (body: ProjectCreate) => Promise<ProjectResponse>
   updateProject: (id: string, body: ProjectUpdate) => Promise<ProjectResponse>
+  deleteProject: (id: string) => Promise<void>
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -38,5 +39,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       projects: get().projects.map((p) => (p.id === id ? updated : p)),
     })
     return updated
+  },
+
+  deleteProject: async (id) => {
+    await projectsApi.deleteProject(id)
+    set({ projects: get().projects.filter((p) => p.id !== id) })
   },
 }))

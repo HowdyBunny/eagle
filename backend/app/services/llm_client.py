@@ -13,10 +13,41 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
 """
 
 import json
+import os
 from typing import Any
 
 from app.config import settings
 from app.utils.logger import logger
+
+# ── Langfuse v4 (optional) ─────────────────────────────────────────────────────
+# IMPORTANT: env vars must be set BEFORE importing langfuse, because it reads
+# them at module load time when initializing the singleton client.
+if settings.LANGFUSE_SECRET_KEY:
+    os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
+if settings.LANGFUSE_PUBLIC_KEY:
+    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
+if settings.LANGFUSE_HOST:
+    os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
+
+try:
+    from langfuse import observe as _lf_observe, get_client as _lf_get_client
+    _LANGFUSE_ENABLED = bool(settings.LANGFUSE_SECRET_KEY)
+    if _LANGFUSE_ENABLED:
+        logger.info("Langfuse observability enabled")
+except ImportError:
+    _LANGFUSE_ENABLED = False
+
+    def _lf_observe(*args, **kwargs):  # type: ignore
+        def decorator(fn):
+            return fn
+        return decorator
+
+    def _lf_get_client():  # type: ignore
+        class _Noop:
+            def update_current_generation(self, **kw): pass
+            def update_current_span(self, **kw): pass
+            def set_current_trace_io(self, *a, **kw): pass
+        return _Noop()
 
 
 def _openai_tools_to_anthropic(tools: list[dict]) -> list[dict]:
@@ -73,6 +104,7 @@ class LLMClient:
 
     # ── Public interface ────────────────────────────────────────────────────
 
+    @_lf_observe(name="agentic_loop", as_type="agent")
     async def agentic_loop(
         self,
         messages: list[dict],
@@ -85,15 +117,30 @@ class LLMClient:
         tools must be in OpenAI function-calling format.
         """
         if self.provider == "anthropic":
-            return await self._agentic_loop_anthropic(messages, tools, tool_executor)
-        return await self._agentic_loop_openai(messages, tools, tool_executor)
+            result = await self._agentic_loop_anthropic(messages, tools, tool_executor)
+        else:
+            result = await self._agentic_loop_openai(messages, tools, tool_executor)
+        reply_text, actions_taken, _ = result
+        _lf_get_client().update_current_span(
+            metadata={"actions": actions_taken, "provider": self.provider,
+                      "tools": [t.get("function", {}).get("name") for t in tools]},
+        )
+        return result
 
+    @_lf_observe(name="simple_chat", as_type="generation")
     async def simple_chat(self, messages: list[dict], max_tokens: int = 2048) -> str:
         """Single-turn text completion, no tools."""
         if self.provider == "anthropic":
-            return await self._simple_chat_anthropic(messages, max_tokens)
-        return await self._simple_chat_openai(messages, max_tokens)
+            result = await self._simple_chat_anthropic(messages, max_tokens)
+        else:
+            result = await self._simple_chat_openai(messages, max_tokens)
+        _lf_get_client().update_current_generation(
+            model=settings.LLM_MODEL,
+            metadata={"provider": self.provider},
+        )
+        return result
 
+    @_lf_observe(name="research_chat", as_type="generation")
     async def research_chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
         """
         Text completion with web search enabled.
@@ -101,8 +148,14 @@ class LLMClient:
         Anthropic: uses Messages API with built-in web_search_20250305 tool.
         """
         if self.provider == "anthropic":
-            return await self._research_chat_anthropic(messages, max_tokens)
-        return await self._research_chat_openai(messages, max_tokens)
+            result = await self._research_chat_anthropic(messages, max_tokens)
+        else:
+            result = await self._research_chat_openai(messages, max_tokens)
+        _lf_get_client().update_current_generation(
+            model=settings.LLM_MODEL,
+            metadata={"provider": self.provider},
+        )
+        return result
 
     # ── OpenAI implementations ──────────────────────────────────────────────
 
@@ -170,10 +223,14 @@ class LLMClient:
         return response.choices[0].message.content or ""
 
     async def _research_chat_openai(self, messages: list[dict], max_tokens: int) -> str:
-        # Responses API supports web_search natively; input accepts the same message format
+        # Responses API requires string input (verified with geekai.co proxy).
+        # Passing a messages list causes "Missing required parameter: 'input'" on some proxies.
+        # Concatenate system instructions + user prompt into a single string.
+        parts = [m["content"] for m in messages if m.get("content")]
+        combined_input = "\n\n---\n\n".join(parts)
         response = await self._get_client().responses.create(
             model=settings.LLM_MODEL,
-            input=messages,
+            input=combined_input,
             tools=[{
                 "type": "web_search",
                 "search_context_size": settings.WEB_SEARCH_CONTEXT_SIZE,
