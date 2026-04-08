@@ -13,6 +13,7 @@ class ProjectCandidateStatus(str, enum.Enum):
     RECOMMENDED = "recommended"
     ELIMINATED = "eliminated"
     INTERVIEWED = "interviewed"
+    FAILED = "failed"
 
 
 class ProjectCandidate(Base):

@@ -222,7 +222,7 @@ export default function SettingsView() {
             subtitle="Coordinator / Research / Evaluator Agent 共用"
             tooltip={
               <div className="space-y-1.5">
-                <p><strong>LLM Provider</strong>：SDK 类型。openai 走 chat.completions + responses API；anthropic 走 messages API。</p>
+                <p><strong>LLM Provider</strong>：SDK 类型。openai 走 responses API；anthropic 走 messages API。</p>
                 <p><strong>LLM API Key</strong>：模型调用密钥。</p>
                 <p><strong>LLM Model</strong>：模型名称，例如 gpt-5.2、claude-sonnet-4-6。</p>
                 <p><strong>LLM Base URL</strong>：第三方代理地址。openai 必须以 /v1 结尾；anthropic 不要带 /v1。留空使用官方默认。</p>
@@ -249,8 +249,8 @@ export default function SettingsView() {
                   onChange={(e) => setLlm({ ...llm, llmProvider: e.target.value as 'openai' | 'anthropic' })}
                   className={inputClass}
                 >
-                  <option value="openai">OpenAI (chat.completions + responses)</option>
-                  <option value="anthropic">Anthropic (messages)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
                 </select>
               </Field>
               <Field label="LLM Model" hint="例如：gpt-5.2、claude-sonnet-4-6">

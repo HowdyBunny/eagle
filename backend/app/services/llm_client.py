@@ -8,7 +8,7 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
 
   LLM_PROVIDER=anthropic
     - chat/agentic_loop: client.messages.create          (Anthropic tool_use)
-    - research_chat:     client.messages.create          (with web_search_20250305 built-in)
+    - research_chat:     client.messages.create          (with web_search_20260209 built-in)
     - LLM_BASE_URL must NOT include /v1
 """
 

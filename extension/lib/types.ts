@@ -41,7 +41,8 @@ export interface EvaluationStatus {
   project_id: string;
   candidate_id: string;
   is_complete: boolean;
-  status: 'pending' | 'recommended' | 'eliminated' | 'interviewed';
+  status: 'pending' | 'recommended' | 'eliminated' | 'interviewed' | 'failed';
+  error_message?: string | null;
   match_score: number | null;
   evaluated_at: string | null;
   poll_interval_seconds: number;

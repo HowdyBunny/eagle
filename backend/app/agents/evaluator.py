@@ -178,6 +178,10 @@ class EvaluatorAgent:
 
         except Exception as e:
             logger.error(f"EA evaluation failed for {candidate_id} / {project_id}: {e}")
+            try:
+                await evaluation_service.mark_evaluation_failed(self.db, project_id, candidate_id)
+            except Exception as mark_err:
+                logger.error(f"Failed to mark evaluation as failed: {mark_err}")
             raise
 
     def _build_evaluation_prompt(self, project, candidate, weight_context: dict, industry_context: str) -> str:

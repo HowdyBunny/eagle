@@ -107,7 +107,7 @@ function OntologyDoc({ ontology }: { ontology: OntologyResponse }) {
 
 export default function ResearchView() {
   const { currentProjectId, currentProject } = useAppStore()
-  const { records, selectedRecordId, loading, isResearching, fetchRecords, selectRecord } = useResearchStore()
+  const { records, selectedRecordId, loading, isResearching, researchError, fetchRecords, selectRecord } = useResearchStore()
   const [showDialog, setShowDialog] = useState(false)
   const navigate = useNavigate()
 
@@ -148,6 +148,18 @@ export default function ResearchView() {
               <Plus size={12} />触发调研
             </button>
           </div>
+
+          {researchError && (
+            <div className="mb-3 px-3 py-3 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-xs font-semibold text-red-700 mb-2">{researchError}</p>
+              <button
+                onClick={() => setShowDialog(true)}
+                className="text-xs font-bold text-red-700 border border-red-300 rounded-lg px-3 py-1 hover:bg-red-100 transition-colors"
+              >
+                重试
+              </button>
+            </div>
+          )}
 
           {isResearching && (
             <div className="mb-3 px-3 py-3 rounded-lg bg-primary/5 border border-primary/20 animate-pulse">

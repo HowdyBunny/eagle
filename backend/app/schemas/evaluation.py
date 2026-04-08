@@ -31,8 +31,9 @@ class ProjectCandidateUpdate(BaseModel):
 class EvaluationStatusResponse(BaseModel):
     project_id: uuid.UUID
     candidate_id: uuid.UUID
-    is_complete: bool               # True once EA has finished and evaluated_at is set
+    is_complete: bool               # True once EA has finished (success or failed)
     status: ProjectCandidateStatus
     match_score: float | None       # null until evaluation completes
     evaluated_at: datetime | None   # null until evaluation completes
     poll_interval_seconds: int = 5  # recommended polling interval
+    error_message: str | None = None  # set when status == "failed"

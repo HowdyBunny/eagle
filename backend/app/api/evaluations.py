@@ -59,14 +59,17 @@ async def get_evaluation_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No evaluation found for this project/candidate pair. Trigger one first.",
         )
+    from app.models.project_candidate import ProjectCandidateStatus
+    is_failed = pc.status == ProjectCandidateStatus.FAILED
     return EvaluationStatusResponse(
         project_id=project_id,
         candidate_id=candidate_id,
-        is_complete=pc.evaluated_at is not None,
+        is_complete=pc.evaluated_at is not None or is_failed,
         status=pc.status,
         match_score=pc.match_score,
         evaluated_at=pc.evaluated_at,
         poll_interval_seconds=5,
+        error_message="评估任务失败，请重试" if is_failed else None,
     )
 
 

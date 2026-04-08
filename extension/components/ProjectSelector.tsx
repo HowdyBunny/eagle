@@ -37,7 +37,7 @@ export function ProjectSelector({ selectedId, onSelect }: ProjectSelectorProps) 
 
   if (loading) {
     return (
-      <div className="text-xs text-gray-500 py-1">加载项目中...</div>
+      <div className="text-xs text-eagle-ink/50 py-1">加载项目中...</div>
     );
   }
 
@@ -47,7 +47,7 @@ export function ProjectSelector({ selectedId, onSelect }: ProjectSelectorProps) 
         <p className="text-xs text-red-600">{error}</p>
         <button
           onClick={fetchProjects}
-          className="text-xs text-blue-600 hover:underline"
+          className="text-xs text-eagle-gold hover:underline"
         >
           重试
         </button>
@@ -57,7 +57,7 @@ export function ProjectSelector({ selectedId, onSelect }: ProjectSelectorProps) 
 
   if (projects.length === 0) {
     return (
-      <div className="text-xs text-gray-500 py-1">
+      <div className="text-xs text-eagle-ink/50 py-1">
         暂无活跃项目。请先在系统中创建项目。
       </div>
     );
@@ -66,10 +66,10 @@ export function ProjectSelector({ selectedId, onSelect }: ProjectSelectorProps) 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-gray-700">关联项目</label>
+        <label className="text-xs font-bold text-eagle-gold tracking-wide">关联项目</label>
         <button
           onClick={fetchProjects}
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="text-xs text-eagle-gold/50 hover:text-eagle-gold transition-colors"
           title="刷新项目列表"
         >
           ↻
@@ -78,7 +78,7 @@ export function ProjectSelector({ selectedId, onSelect }: ProjectSelectorProps) 
       <select
         value={selectedId ?? ''}
         onChange={handleChange}
-        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-full rounded-lg border border-eagle-gold/40 bg-white px-2 py-1.5 text-xs text-eagle-ink font-medium focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold cursor-pointer"
       >
         <option value="">— 不关联项目 —</option>
         {projects.map((p) => (

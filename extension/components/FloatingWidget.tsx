@@ -15,7 +15,7 @@ type WidgetState =
   | 'evaluated'
   | 'error';
 
-const MAX_POLL = 24; // 2 minutes at 5s interval
+const MAX_POLL = 36; // 3 minutes at 5s interval
 
 export function FloatingWidget() {
   const [minimized, setMinimized] = useState(false);
@@ -28,6 +28,7 @@ export function FloatingWidget() {
   const [collectedCandidate, setCollectedCandidate] = useState<Candidate | null>(null);
   const [evalStatus, setEvalStatus] = useState<EvaluationStatus | null>(null);
   const [pollCount, setPollCount] = useState(0);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
   // Wait for the full profile DOM to load, then extract for the preview.
   useEffect(() => {
@@ -106,6 +107,7 @@ export function FloatingWidget() {
     async (projectId: string, candidateId: string, count: number) => {
       if (count >= MAX_POLL) {
         setWidgetState('evaluated');
+        setEvalError('任务超时，请重试');
         return;
       }
 
@@ -124,6 +126,12 @@ export function FloatingWidget() {
 
       setEvalStatus(res.data);
 
+      if (res.data.status === 'failed') {
+        setWidgetState('evaluated');
+        setEvalError(res.data.error_message ?? '评估任务失败，请重试');
+        return;
+      }
+
       if (res.data.is_complete) {
         setWidgetState('evaluated');
       } else {
@@ -139,6 +147,7 @@ export function FloatingWidget() {
     setEvalStatus(null);
     setPollCount(0);
     setErrorMessage('');
+    setEvalError(null);
     // Re-parse candidate data
     try {
       const data = extractCandidateData();
@@ -158,7 +167,7 @@ export function FloatingWidget() {
       <div className="fixed right-4 top-1/2 -translate-y-1/2 z-[999999]">
         <button
           onClick={() => setMinimized(false)}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 shadow-lg hover:bg-blue-700 transition-colors"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-eagle-gold shadow-lg hover:bg-eagle-primary transition-colors"
           title="展开 Eagle 插件"
         >
           <EagleLogo />
@@ -169,17 +178,17 @@ export function FloatingWidget() {
 
   // --- Full view ---
   return (
-    <div className="fixed right-4 top-1/2 -translate-y-1/2 z-[999999] w-72 rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+    <div className="fixed right-4 top-1/2 -translate-y-1/2 z-[999999] w-72 rounded-xl border border-eagle-border bg-white shadow-2xl overflow-hidden font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between bg-blue-600 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-eagle-border/60 px-3 py-2.5 bg-white">
         <div className="flex items-center gap-2">
           <EagleLogo small />
-          <span className="text-sm font-bold text-white tracking-wide">Eagle</span>
-          <span className="text-xs text-blue-200 font-normal">猎头助手</span>
+          <span className="font-display text-sm font-bold text-eagle-primary tracking-tight">Eagle</span>
+          <span className="text-xs text-eagle-gold font-medium">猎头助手</span>
         </div>
         <button
           onClick={() => setMinimized(true)}
-          className="rounded p-0.5 text-blue-200 hover:text-white hover:bg-blue-700 transition-colors"
+          className="rounded p-0.5 text-eagle-gold/60 hover:text-eagle-gold hover:bg-eagle-card-end transition-colors"
           title="最小化"
         >
           <MinimizeIcon />
@@ -211,6 +220,15 @@ export function FloatingWidget() {
             matchScore={evalStatus?.match_score ?? null}
             status={evalStatus?.status ?? ''}
             pollCount={pollCount}
+            error={evalError}
+            onRetry={evalError && collectedCandidate && selectedProject
+              ? () => {
+                  setEvalError(null);
+                  setEvalStatus(null);
+                  triggerEvaluation(selectedProject.id, collectedCandidate.id);
+                }
+              : undefined
+            }
           />
         )}
 
@@ -228,9 +246,9 @@ export function FloatingWidget() {
                   type="checkbox"
                   checked={autoEvaluate}
                   onChange={(e) => setAutoEvaluate(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-3.5 w-3.5 rounded border-eagle-border text-eagle-gold focus:ring-eagle-gold"
                 />
-                <span className="text-xs text-gray-600">采集后自动 AI 评估</span>
+                <span className="text-xs text-eagle-ink/70">采集后自动 AI 评估</span>
               </label>
             )}
           </>
@@ -242,10 +260,10 @@ export function FloatingWidget() {
             <button
               onClick={handleCollect}
               disabled={isCollecting || !candidateData || !!parseError}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm
-                hover:bg-blue-700 active:bg-blue-800
-                disabled:bg-gray-300 disabled:cursor-not-allowed
-                transition-colors"
+              className="w-full rounded-lg bg-gradient-to-br from-[#d4b344] to-[#b8921c] px-4 py-2 text-sm font-semibold text-white shadow-sm
+                hover:from-[#c5a028] hover:to-[#a38014] active:scale-[0.98]
+                disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed
+                transition-all"
             >
               {isCollecting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -262,14 +280,14 @@ export function FloatingWidget() {
               {widgetState === 'collected' && selectedProject && !autoEvaluate && collectedCandidate && (
                 <button
                   onClick={() => triggerEvaluation(selectedProject.id, collectedCandidate.id)}
-                  className="w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
+                  className="w-full rounded-lg bg-gradient-to-br from-[#d4b344] to-[#b8921c] px-4 py-2 text-sm font-semibold text-white hover:from-[#c5a028] hover:to-[#a38014] transition-all"
                 >
                   触发 AI 评估
                 </button>
               )}
               <button
                 onClick={handleReset}
-                className="w-full rounded-lg border border-gray-300 px-4 py-1.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                className="w-full rounded-lg border border-eagle-border px-4 py-1.5 text-xs text-eagle-ink/60 hover:bg-eagle-card-end transition-colors"
               >
                 重置
               </button>
@@ -278,7 +296,7 @@ export function FloatingWidget() {
         </div>
 
         {/* Status bar */}
-        <div className="border-t border-gray-100 pt-2">
+        <div className="border-t border-eagle-border/60 pt-2">
           <StatusBadge
             status={
               widgetState === 'idle' ? 'idle'
@@ -297,11 +315,21 @@ export function FloatingWidget() {
 
 // --- Icons ---
 function EagleLogo({ small }: { small?: boolean }) {
-  const size = small ? 20 : 24;
+  const size = small ? 22 : 26;
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9" />
-      <path d="M12 6l-5 2.8v5.4l5 2.8 5-2.8V8.8L12 6z" fill="#2563eb" />
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="eagleGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#e8d08d" />
+          <stop offset="50%" stopColor="#c5a028" />
+          <stop offset="100%" stopColor="#8a6d1c" />
+        </linearGradient>
+      </defs>
+      <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill="url(#eagleGoldGrad)" opacity="0.25" />
+      <polygon points="50,10 88,32 88,68 50,90 12,68 12,32" fill="url(#eagleGoldGrad)" />
+      <path d="M 30 45 Q 45 35 65 40 Q 75 45 85 60 Q 70 50 60 55 Q 55 65 45 75 Q 35 60 30 45 Z" fill="#ffffff" />
+      <circle cx="55" cy="45" r="3" fill="#745b00" />
+      <path d="M 65 40 Q 75 40 85 45 Q 75 48 65 45 Z" fill="#ffffff" />
     </svg>
   );
 }

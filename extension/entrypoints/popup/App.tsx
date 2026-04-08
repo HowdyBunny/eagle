@@ -43,20 +43,30 @@ export default function App() {
   return (
     <div className="w-80 bg-white font-sans">
       {/* Header */}
-      <div className="bg-blue-600 px-4 py-3 flex items-center gap-2">
-        <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9" />
-          <path d="M12 6l-5 2.8v5.4l5 2.8 5-2.8V8.8L12 6z" fill="#2563eb" />
+      <div className="border-b border-eagle-border/60 px-4 py-3 flex items-center gap-2 bg-white">
+        <svg width={22} height={22} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="popupGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#e8d08d" />
+              <stop offset="50%" stopColor="#c5a028" />
+              <stop offset="100%" stopColor="#8a6d1c" />
+            </linearGradient>
+          </defs>
+          <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill="url(#popupGoldGrad)" opacity="0.25" />
+          <polygon points="50,10 88,32 88,68 50,90 12,68 12,32" fill="url(#popupGoldGrad)" />
+          <path d="M 30 45 Q 45 35 65 40 Q 75 45 85 60 Q 70 50 60 55 Q 55 65 45 75 Q 35 60 30 45 Z" fill="#ffffff" />
+          <circle cx="55" cy="45" r="3" fill="#745b00" />
+          <path d="M 65 40 Q 75 40 85 45 Q 75 48 65 45 Z" fill="#ffffff" />
         </svg>
-        <span className="text-white font-bold text-base tracking-wide">Eagle</span>
-        <span className="text-blue-200 text-sm">设置</span>
+        <span className="font-display font-bold text-base text-eagle-primary tracking-tight">Eagle</span>
+        <span className="text-eagle-gold text-sm font-medium">设置</span>
       </div>
 
       {/* Body */}
       <div className="p-4 space-y-4">
         {/* API URL */}
         <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-gray-700">
+          <label className="block text-xs font-semibold text-eagle-primary">
             后端 API 地址
           </label>
           <input
@@ -64,15 +74,15 @@ export default function App() {
             value={apiUrl}
             onChange={(e) => setApiUrlState(e.target.value)}
             placeholder="http://localhost:8000"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400
-              focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-lg border border-eagle-border px-3 py-2 text-sm text-eagle-ink placeholder-eagle-ink/30
+              focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
           />
-          <p className="text-xs text-gray-400">Eagle 后端服务地址，默认 localhost:8000</p>
+          <p className="text-xs text-eagle-ink/40">Eagle 后端服务地址，默认 localhost:8000</p>
         </div>
 
         {/* API Key */}
         <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-gray-700">
+          <label className="block text-xs font-semibold text-eagle-primary">
             API Key
           </label>
           <input
@@ -80,10 +90,10 @@ export default function App() {
             value={apiKey}
             onChange={(e) => setApiKeyState(e.target.value)}
             placeholder="在 .env 中配置的 API_KEY"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400
-              focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-lg border border-eagle-border px-3 py-2 text-sm text-eagle-ink placeholder-eagle-ink/30
+              focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
           />
-          <p className="text-xs text-gray-400">对应后端 .env 中的 API_KEY 变量</p>
+          <p className="text-xs text-eagle-ink/40">对应后端 .env 中的 API_KEY 变量</p>
         </div>
 
         {/* Connection test */}
@@ -91,20 +101,20 @@ export default function App() {
           <button
             onClick={handleTestConnection}
             disabled={connStatus === 'testing'}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700
-              hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full rounded-lg border border-eagle-gold/40 px-3 py-2 text-sm font-medium text-eagle-gold
+              hover:bg-eagle-card-end active:bg-eagle-card-end disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {connStatus === 'testing' ? '测试中...' : '测试连接'}
           </button>
 
           {connStatus === 'ok' && (
-            <div className="flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2">
               <span className="h-2 w-2 rounded-full bg-green-500" />
               <span className="text-xs text-green-700 font-medium">连接成功 ✓</span>
             </div>
           )}
           {connStatus === 'error' && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 space-y-0.5">
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 space-y-0.5">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-red-500" />
                 <span className="text-xs text-red-700 font-medium">连接失败</span>
@@ -117,16 +127,16 @@ export default function App() {
         {/* Save button */}
         <button
           onClick={handleSave}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white
-            hover:bg-blue-700 active:bg-blue-800 transition-colors"
+          className="w-full rounded-lg bg-gradient-to-br from-[#d4b344] to-[#b8921c] px-4 py-2 text-sm font-semibold text-white
+            hover:from-[#c5a028] hover:to-[#a38014] active:scale-[0.98] transition-all shadow-sm"
         >
           {saved ? '已保存 ✓' : '保存设置'}
         </button>
 
         {/* Info */}
-        <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 space-y-1">
-          <p className="text-xs font-medium text-gray-600">如何使用</p>
-          <ul className="text-xs text-gray-500 space-y-0.5 list-disc list-inside">
+        <div className="rounded-xl bg-gradient-to-br from-eagle-card-start to-eagle-card-end border border-eagle-border px-3 py-2 space-y-1">
+          <p className="text-xs font-bold text-eagle-gold">如何使用</p>
+          <ul className="text-xs text-eagle-ink/60 space-y-0.5 list-disc list-inside">
             <li>打开 LinkedIn 或猎聘候选人主页</li>
             <li>页面右侧会出现 Eagle 浮窗</li>
             <li>选择项目，点击「采集候选人」</li>

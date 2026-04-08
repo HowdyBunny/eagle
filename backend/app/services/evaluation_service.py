@@ -76,6 +76,26 @@ async def get_project_candidate(
     return result.scalar_one_or_none()
 
 
+async def mark_evaluation_failed(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+) -> ProjectCandidate | None:
+    result = await db.execute(
+        select(ProjectCandidate).where(
+            ProjectCandidate.project_id == project_id,
+            ProjectCandidate.candidate_id == candidate_id,
+        )
+    )
+    pc = result.scalar_one_or_none()
+    if not pc:
+        return None
+    pc.status = ProjectCandidateStatus.FAILED
+    await db.commit()
+    await db.refresh(pc)
+    return pc
+
+
 async def update_project_candidate(
     db: AsyncSession,
     project_id: uuid.UUID,
