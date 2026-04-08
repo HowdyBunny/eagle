@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, Search, Filter, X } from 'lucide-react'
+import { Users, Search, Filter, X, Trash2 } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
 import { useDebounce } from '@/hooks/use-debounce'
 import EmptyState from '@/components/shared/EmptyState'
@@ -11,14 +11,27 @@ import type { CandidateResponse } from '@/types'
 export default function TalentPoolView() {
   const {
     candidates, searchResults, isSearchMode, loading,
-    fetchCandidates, searchCandidates, setFilters, setPage, clearSearch,
+    fetchCandidates, searchCandidates, deleteCandidate, setFilters, setPage, clearSearch,
     filters, skip, limit,
   } = useCandidateStore()
 
   const [query, setQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateResponse | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const debouncedQuery = useDebounce(query, 400)
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    if (!window.confirm('确认从人才库中删除此候选人？')) return
+    setDeletingId(id)
+    try {
+      await deleteCandidate(id)
+      if (selectedCandidate?.id === id) setSelectedCandidate(null)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   useEffect(() => { fetchCandidates() }, [fetchCandidates])
 
@@ -200,12 +213,22 @@ export default function TalentPoolView() {
                   </td>
                   {/* Actions */}
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setSelectedCandidate(c)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-[11px] font-bold text-primary hover:underline"
-                    >
-                      查看档案
-                    </button>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => setSelectedCandidate(c)}
+                        className="text-[11px] font-bold text-primary hover:underline"
+                      >
+                        查看档案
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, c.id)}
+                        disabled={deletingId === c.id}
+                        className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                        title="删除"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

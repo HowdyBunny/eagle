@@ -13,3 +13,6 @@ pnpm install
 cd frontend && pnpm dev          # dev server at http://localhost:5173
 pnpm build        # prod bundle into dist/
 ```
+
+extension一样
+cd extension

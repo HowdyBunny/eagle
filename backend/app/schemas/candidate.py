@@ -47,6 +47,7 @@ class CandidateResponse(BaseModel):
     linkedin_url: str | None
     liepin_url: str | None
     experience_summary: str | None
+    raw_structured_data: dict | None
     confidence_score: float | None
     source_platform: str | None
     created_at: datetime

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CandidateResponse, CandidateSearchResult } from '@/types'
+import type { CandidateUpdate, CandidateResponse, CandidateSearchResult } from '@/types'
 import * as candidatesApi from '@/lib/api/candidates'
 
 interface CandidateFilters {
@@ -21,6 +21,8 @@ interface CandidateState {
   error: string | null
   fetchCandidates: () => Promise<void>
   searchCandidates: (query: string) => Promise<void>
+  updateCandidate: (id: string, data: CandidateUpdate) => Promise<CandidateResponse>
+  deleteCandidate: (id: string) => Promise<void>
   setFilters: (filters: Partial<CandidateFilters>) => void
   setPage: (skip: number) => void
   clearSearch: () => void
@@ -77,6 +79,25 @@ export const useCandidateStore = create<CandidateState>((set, get) => ({
     } catch (e) {
       set({ error: String(e), loading: false })
     }
+  },
+
+  updateCandidate: async (id, data) => {
+    const updated = await candidatesApi.updateCandidate(id, data)
+    set((s) => ({
+      candidates: s.candidates.map((c) => (c.id === id ? updated : c)),
+      searchResults: s.searchResults.map((r) =>
+        r.candidate.id === id ? { ...r, candidate: updated } : r,
+      ),
+    }))
+    return updated
+  },
+
+  deleteCandidate: async (id) => {
+    await candidatesApi.deleteCandidate(id)
+    set((s) => ({
+      candidates: s.candidates.filter((c) => c.id !== id),
+      searchResults: s.searchResults.filter((r) => r.candidate.id !== id),
+    }))
   },
 
   setFilters: (partial) => {

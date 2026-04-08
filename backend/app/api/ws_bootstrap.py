@@ -46,8 +46,8 @@ def _derive_stub_name(text: str) -> str:
 class WsToolExecutor(ToolExecutor):
     """ToolExecutor subclass that pushes metadata events over WebSocket."""
 
-    def __init__(self, db: AsyncSession, ws: WebSocket):
-        super().__init__(db)
+    def __init__(self, db: AsyncSession, ws: WebSocket, project_id: uuid.UUID):
+        super().__init__(db, current_project_id=project_id)
         self._ws = ws
 
     async def execute(self, tool_name: str, arguments: dict):
@@ -62,17 +62,21 @@ class WsToolExecutor(ToolExecutor):
 
         # If CA just updated the project, push the refreshed project data
         if tool_name == "update_project" and "error" not in result:
-            project_id = arguments.get("project_id")
-            if project_id:
-                project = await project_service.get_project(
-                    self.db, uuid.UUID(project_id)
-                )
-                if project:
-                    resp = ProjectResponse.model_validate(project)
-                    await self._ws.send_json({
-                        "type": "project_updated",
-                        "project": json.loads(resp.model_dump_json()),
-                    })
+            # Use resolved project_id from result (handles LLM passing garbage UUID)
+            resolved_id = result.get("project_id") or arguments.get("project_id")
+            if resolved_id:
+                try:
+                    project = await project_service.get_project(
+                        self.db, uuid.UUID(str(resolved_id))
+                    )
+                    if project:
+                        resp = ProjectResponse.model_validate(project)
+                        await self._ws.send_json({
+                            "type": "project_updated",
+                            "project": json.loads(resp.model_dump_json()),
+                        })
+                except (ValueError, AttributeError):
+                    pass
 
         return result
 
@@ -123,7 +127,7 @@ async def bootstrap_project(ws: WebSocket):
             await ws.send_json({"type": "status", "message": "正在分析需求…"})
 
             llm = LLMClient()
-            executor = WsToolExecutor(db, ws)
+            executor = WsToolExecutor(db, ws, project.id)
 
             # Build system prompt with project context (same as CoordinatorAgent.chat)
             from app.agents.coordinator import CA_SYSTEM_PROMPT
@@ -132,6 +136,9 @@ async def bootstrap_project(ws: WebSocket):
                 f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
                 f"\n- 项目名: {project.project_name}\n- 模式: {project.mode.value}"
                 f"\n- 状态: {project.status.value}"
+                f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
+                f"你的第一个动作必须是调用 `update_project`（project_id={project.id}），"
+                f"从猎头消息中提取真实客户名和岗位名后立即调用，不得跳过。**"
             )
 
             messages = [

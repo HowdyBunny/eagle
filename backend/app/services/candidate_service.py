@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candidate import Candidate
-from app.schemas.candidate import CandidateCreate
+from app.schemas.candidate import CandidateCreate, CandidateUpdate
 from app.services.confidence_service import calculate_confidence_score
 
 
@@ -73,6 +73,34 @@ async def list_candidates(
     for c in candidates:
         _refresh_confidence(c)
     return candidates
+
+
+async def update_candidate(
+    db: AsyncSession, candidate_id: uuid.UUID, data: CandidateUpdate
+) -> Candidate | None:
+    result = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        return None
+
+    patch = data.model_dump(exclude_unset=True)
+    for field, value in patch.items():
+        setattr(candidate, field, value)
+    candidate.updated_at = datetime.now(tz=timezone.utc)
+    await db.commit()
+    await db.refresh(candidate)
+    _refresh_confidence(candidate)
+    return candidate
+
+
+async def delete_candidate(db: AsyncSession, candidate_id: uuid.UUID) -> bool:
+    result = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        return False
+    await db.delete(candidate)
+    await db.commit()
+    return True
 
 
 def _refresh_confidence(candidate: Candidate) -> None:

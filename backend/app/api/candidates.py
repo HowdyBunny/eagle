@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import verify_api_key
 from app.database import get_db
-from app.schemas.candidate import CandidateCreate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult
+from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult
 from app.services import candidate_service
 from app.services.search_service import SearchService
 
@@ -60,6 +60,36 @@ async def get_candidate(
     if not candidate:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
     return candidate
+
+
+@router.patch("/{candidate_id}", response_model=CandidateResponse)
+async def update_candidate(
+    candidate_id: uuid.UUID,
+    data: CandidateUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    candidate = await candidate_service.update_candidate(db, candidate_id, data)
+    if not candidate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    # Re-embed if experience_summary was patched
+    if "experience_summary" in data.model_fields_set and candidate.experience_summary:
+        from app.services.embedding_service import EmbeddingService
+        svc = EmbeddingService()
+        background_tasks.add_task(svc.embed_candidate, candidate.id, candidate.experience_summary)
+    return candidate
+
+
+@router.delete("/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_candidate(
+    candidate_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    deleted = await candidate_service.delete_candidate(db, candidate_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
 
 @router.post("/search", response_model=list[CandidateSearchResult])

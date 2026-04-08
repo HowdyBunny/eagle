@@ -10,7 +10,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 
 export default function ChatView() {
   const { currentProjectId, currentProject, authApiKey, selectProject } = useAppStore()
-  const { messages, sending, loadHistory, sendMessage } = useChatStore()
+  const { messages, sending, _sendingProjectId, loadHistory, sendMessage } = useChatStore()
+  const isSendingHere = sending && _sendingProjectId === currentProjectId
   const bottomRef = useRef<HTMLDivElement>(null)
   const [bootstrapping, setBootstrapping] = useState(false)
   const [bootstrapStatus, setBootstrapStatus] = useState<string | null>(null)
@@ -101,7 +102,7 @@ export default function ChatView() {
       <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-5">
         {!currentProjectId && <ProjectIntroBubble />}
 
-        {currentProjectId && messages.length === 0 && !sending && !bootstrapping && (
+        {currentProjectId && messages.length === 0 && !isSendingHere && !bootstrapping && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-12 h-12 rounded-xl kinetic-gradient flex items-center justify-center shadow mb-4">
               <span className="text-white font-headline font-black text-lg">CA</span>
@@ -125,7 +126,7 @@ export default function ChatView() {
           )
         )}
 
-        {(sending || bootstrapping) && (
+        {(isSendingHere || bootstrapping) && (
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-full kinetic-gradient flex items-center justify-center">
               <span className="text-white text-xs font-bold">CA</span>
@@ -148,7 +149,7 @@ export default function ChatView() {
         <div ref={bottomRef} />
       </div>
 
-      <ChatInput onSend={handleSend} disabled={sending || bootstrapping} />
+      <ChatInput onSend={handleSend} disabled={isSendingHere || bootstrapping} />
     </div>
   )
 }

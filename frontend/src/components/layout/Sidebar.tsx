@@ -28,9 +28,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-outline-variant/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg kinetic-gradient flex items-center justify-center">
-            <span className="text-white font-headline font-black text-sm">E</span>
-          </div>
+          <img src="/eagle.png" alt="Eagle" className="w-8 h-8 rounded-lg object-contain" />
           <div>
             <p className="font-headline font-black text-sm tracking-tight text-on-surface">Eagle</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">猎头 AI 助手</p>

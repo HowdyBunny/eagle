@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import eagleIcon from '/wxt.svg';
 import { getApiUrl, getApiKey, setApiUrl, setApiKey } from '../../lib/storage';
 
 type ConnectionStatus = 'unknown' | 'testing' | 'ok' | 'error';
@@ -44,20 +45,7 @@ export default function App() {
     <div className="w-80 bg-white font-sans">
       {/* Header */}
       <div className="border-b border-eagle-border/60 px-4 py-3 flex items-center gap-2 bg-white">
-        <svg width={22} height={22} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="popupGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#e8d08d" />
-              <stop offset="50%" stopColor="#c5a028" />
-              <stop offset="100%" stopColor="#8a6d1c" />
-            </linearGradient>
-          </defs>
-          <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill="url(#popupGoldGrad)" opacity="0.25" />
-          <polygon points="50,10 88,32 88,68 50,90 12,68 12,32" fill="url(#popupGoldGrad)" />
-          <path d="M 30 45 Q 45 35 65 40 Q 75 45 85 60 Q 70 50 60 55 Q 55 65 45 75 Q 35 60 30 45 Z" fill="#ffffff" />
-          <circle cx="55" cy="45" r="3" fill="#745b00" />
-          <path d="M 65 40 Q 75 40 85 45 Q 75 48 65 45 Z" fill="#ffffff" />
-        </svg>
+        <img src={eagleIcon} alt="Eagle" className="w-6 h-6 object-contain" />
         <span className="font-display font-bold text-base text-eagle-primary tracking-tight">Eagle</span>
         <span className="text-eagle-gold text-sm font-medium">设置</span>
       </div>

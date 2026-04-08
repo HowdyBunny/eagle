@@ -160,7 +160,7 @@ class LLMClient:
     # ── OpenAI implementations ──────────────────────────────────────────────
 
     async def _agentic_loop_openai(
-        self, messages: list[dict], tools: list[dict], tool_executor: Any
+        self, messages: list[dict], tools: list[dict], tool_executor: Any,
     ) -> tuple[str, list[str], dict | None]:
         actions_taken: list[str] = []
         intent_json: dict | None = None
@@ -241,7 +241,7 @@ class LLMClient:
     # ── Anthropic implementations ───────────────────────────────────────────
 
     async def _agentic_loop_anthropic(
-        self, messages: list[dict], tools: list[dict], tool_executor: Any
+        self, messages: list[dict], tools: list[dict], tool_executor: Any,
     ) -> tuple[str, list[str], dict | None]:
         anthropic_tools = _openai_tools_to_anthropic(tools)
         system, msgs = _extract_system(messages)

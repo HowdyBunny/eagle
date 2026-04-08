@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client'
-import type { CandidateCreate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult } from '@/types'
+import type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult } from '@/types'
 
 export interface ListCandidatesParams {
   location?: string
@@ -23,6 +23,15 @@ export async function addCandidate(body: CandidateCreate): Promise<CandidateResp
 export async function getCandidate(candidateId: string): Promise<CandidateResponse> {
   const { data } = await apiClient.get(`/candidates/${candidateId}`)
   return data
+}
+
+export async function updateCandidate(candidateId: string, body: CandidateUpdate): Promise<CandidateResponse> {
+  const { data } = await apiClient.patch(`/candidates/${candidateId}`, body)
+  return data
+}
+
+export async function deleteCandidate(candidateId: string): Promise<void> {
+  await apiClient.delete(`/candidates/${candidateId}`)
 }
 
 export async function searchCandidates(body: CandidateSearchRequest): Promise<CandidateSearchResult[]> {

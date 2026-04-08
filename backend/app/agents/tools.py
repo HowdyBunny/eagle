@@ -29,14 +29,41 @@ CA_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "clarify_requirement",
-            "description": "Update the project's requirement_profile with clarified structured requirements. Save the finalized structured requirement profile to the project.ONLY call this when you have collected enough information to fill all fields.Do NOT call this during the clarification process itself.",
+            "description": (
+                "Save the structured requirement profile to the project. "
+                "Call this as soon as you have enough info to fill the known fields — "
+                "unknown/optional fields can be omitted or set to null. "
+                "Do NOT wait until every field is confirmed before calling."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "UUID of the project"},
                     "requirement_profile": {
                         "type": "object",
-                        "description": "Structured requirement profile JSON with hard requirements (location, experience, salary) and soft requirements",
+                        "description": "Structured requirement profile. Fill what you know; omit unknown fields.",
+                        "properties": {
+                            "role_summary": {"type": "string", "description": "One-line summary of the role, e.g. '米哈游-开放世界游戏总制作人'"},
+                            "location": {"type": "string", "description": "Work location(s), e.g. '上海/不限/可远程'"},
+                            "min_years_experience": {"type": "number", "description": "Minimum years of relevant experience"},
+                            "max_years_experience": {"type": "number", "description": "Maximum years of experience (optional)"},
+                            "salary_range": {"type": "string", "description": "Salary range, e.g. '80万-120万+期权'"},
+                            "education": {"type": "string", "description": "Minimum education requirement, e.g. '本科及以上'"},
+                            "employment_type": {"type": "string", "description": "e.g. '全职', '兼职', '顾问'"},
+                            "hard_requirements": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Non-negotiable must-have conditions as a list of strings",
+                            },
+                            "soft_requirements": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Nice-to-have or preferred conditions as a list of strings",
+                            },
+                            "industry_background": {"type": "string", "description": "Required industry or domain background"},
+                            "team_size": {"type": "string", "description": "Expected team size to manage, e.g. '50-200人（含外包）'"},
+                            "notes": {"type": "string", "description": "Any other important context or constraints"},
+                        },
                     },
                 },
                 "required": ["project_id", "requirement_profile"],
@@ -135,7 +162,15 @@ CA_TOOLS: list[dict] = [
                     "project_name": {"type": "string", "description": "Descriptive project name, e.g. '某公司-技术VP'"},
                     "requirement_profile": {
                         "type": "object",
-                        "description": "Structured requirement profile JSON (hard + soft requirements)",
+                        "description": "Structured requirement profile JSON (hard + soft requirements). Use same schema as clarify_requirement.",
+                        "properties": {
+                            "role_summary": {"type": "string"},
+                            "location": {"type": "string"},
+                            "min_years_experience": {"type": "number"},
+                            "salary_range": {"type": "string"},
+                            "hard_requirements": {"type": "array", "items": {"type": "string"}},
+                            "soft_requirements": {"type": "array", "items": {"type": "string"}},
+                        },
                     },
                 },
                 "required": ["project_id"],
@@ -257,21 +292,33 @@ class ToolExecutor:
 
     async def _handle_update_project(
         self,
-        project_id: str,
+        project_id: str | None = None,
         client_name: str | None = None,
         project_name: str | None = None,
         requirement_profile: dict | None = None,
     ) -> dict:
+        # Resolve project UUID: trust LLM value first, fallback to known current project
+        resolved_id: uuid.UUID | None = None
+        if project_id:
+            try:
+                resolved_id = uuid.UUID(project_id)
+            except (ValueError, AttributeError):
+                pass
+        if resolved_id is None:
+            resolved_id = self.current_project_id
+        if resolved_id is None:
+            return {"error": "project_id is required"}
+
         data = ProjectUpdate(
             client_name=client_name,
             project_name=project_name,
             requirement_profile=requirement_profile,
         )
-        project = await project_service.update_project(self.db, uuid.UUID(project_id), data)
+        project = await project_service.update_project(self.db, resolved_id, data)
         if not project:
-            return {"error": f"Project {project_id} not found"}
+            return {"error": f"Project {resolved_id} not found"}
         return {
-            "project_id": project_id,
+            "project_id": str(resolved_id),
             "client_name": project.client_name,
             "project_name": project.project_name,
             "status": "project_updated",
