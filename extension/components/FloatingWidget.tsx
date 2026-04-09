@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-const eagleIconUrl = browser.runtime.getURL('/icon/32.png');
+const eagleIconUrl = browser.runtime.getURL('/icon/48.png');
 import type { CandidateData, Candidate, EvaluationStatus, Project } from '../lib/types';
 import { extractCandidateData, waitForProfile } from '../lib/parsers/index';
 import { sendMessage } from '../lib/messaging';

@@ -19,6 +19,7 @@ export default function ChatView() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [bootstrapping, setBootstrapping] = useState(false)
   const [bootstrapStatus, setBootstrapStatus] = useState<string | null>(null)
+  const [bootstrapStreamingContent, setBootstrapStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const bootstrapDoneRef = useRef(false)
@@ -51,16 +52,23 @@ export default function ChatView() {
         }
         break
 
+      case 'text':
+        setBootstrapStreamingContent(prev => prev + (event.delta ?? ''))
+        setBootstrapStatus(null)
+        break
+
       case 'ca_reply':
         // Bootstrap complete — reload full history (includes both user msg + CA reply)
         setBootstrapping(false)
         setBootstrapStatus(null)
+        setBootstrapStreamingContent('')
         break
 
       case 'done': {
         bootstrapDoneRef.current = true
         setBootstrapping(false)
         setBootstrapStatus(null)
+        setBootstrapStreamingContent('')
         // Reload history from the project that was created
         const projectId = useAppStore.getState().currentProjectId
         if (projectId) loadHistory(projectId)
@@ -72,6 +80,7 @@ export default function ChatView() {
         setError(event.message ?? '未知错误')
         setBootstrapping(false)
         setBootstrapStatus(null)
+        setBootstrapStreamingContent('')
         break
     }
   }, [selectProject, loadHistory])
@@ -156,8 +165,23 @@ export default function ChatView() {
           />
         )}
 
+        {/* Bootstrap streaming bubble */}
+        {bootstrapping && bootstrapStreamingContent && (
+          <AgentBubble
+            message={{
+              id: 'bootstrap-streaming',
+              project_id: '',
+              role: 'assistant',
+              content: bootstrapStreamingContent,
+              intent_json: null,
+              created_at: new Date().toISOString(),
+            }}
+            isStreaming
+          />
+        )}
+
         {/* Spinner — shown during tool execution or while waiting for first token */}
-        {((isSendingHere && !streamingContent) || bootstrapping) && (
+        {((isSendingHere && !streamingContent) || (bootstrapping && !bootstrapStreamingContent)) && (
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-full kinetic-gradient flex items-center justify-center">
               <span className="text-white text-xs font-bold">CA</span>

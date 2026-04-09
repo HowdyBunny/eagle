@@ -168,6 +168,7 @@ class LLMClient:
         )
         return result
 
+    @_lf_observe(name="agentic_loop_stream", as_type="agent")
     async def agentic_loop_stream(
         self,
         messages: list[dict],
@@ -196,6 +197,14 @@ class LLMClient:
         else:
             gen = self._agentic_loop_stream_openai(messages, tools, tool_executor)
         async for event in gen:
+            if event.get("type") == "done":
+                _lf_get_client().update_current_span(
+                    metadata={
+                        "actions": event.get("actions_taken", []),
+                        "provider": self.provider,
+                        "model": settings.LLM_MODEL,
+                    },
+                )
             yield event
 
     # ── OpenAI implementations ──────────────────────────────────────────────

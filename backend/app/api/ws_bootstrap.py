@@ -153,9 +153,23 @@ async def bootstrap_project(ws: WebSocket):
 
             await ws.send_json({"type": "status", "message": "CA 正在思考…"})
 
-            reply_text, actions_taken, intent_json = await llm.agentic_loop(
-                messages, CA_TOOLS, executor
-            )
+            reply_text = ""
+            actions_taken: list = []
+            intent_json = None
+
+            async for event in llm.agentic_loop_stream(messages, CA_TOOLS, executor):
+                if event["type"] == "text":
+                    await ws.send_json({"type": "text", "delta": event["delta"]})
+                elif event["type"] == "tool_call":
+                    # WsToolExecutor already sent this event; skip to avoid duplicate
+                    pass
+                elif event["type"] == "done":
+                    reply_text = event["reply_text"]
+                    actions_taken = event.get("actions_taken", [])
+                    intent_json = event.get("intent_json")
+                    break
+                elif event["type"] == "error":
+                    raise RuntimeError(event.get("message", "LLM streaming error"))
 
             # Save assistant reply
             await conversation_service.save_message(

@@ -23,16 +23,19 @@ export interface BootstrapEvent {
     | 'project_created'
     | 'project_updated'
     | 'tool_call'
+    | 'text'
     | 'ca_reply'
     | 'done'
     | 'error'
-  // status
+  // status / error
   message?: string
   // project_created / project_updated
   project?: ProjectResponse
   // tool_call
   tool?: string
   args?: string[]
+  // text delta
+  delta?: string
   // ca_reply
   content?: string
   actions_taken?: string[]
