@@ -150,18 +150,26 @@ class EvaluatorAgent:
             prompt = self._build_evaluation_prompt(project, candidate, weight_context, industry_context)
 
             # 6. Call LLM for evaluation
-            reply_text = await self.llm.simple_chat([
+            messages = [
                 {"role": "system", "content": EA_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
-            ])
+            ]
+            reply_text = await self.llm.simple_chat(messages)
 
-            # 7. Parse JSON response
-            reply_text = reply_text.strip()
-            if reply_text.startswith("```"):
-                reply_text = reply_text.split("```")[1]
-                if reply_text.startswith("json"):
-                    reply_text = reply_text[4:]
-            evaluation = json.loads(reply_text)
+            # 7. Parse JSON response (with one retry if structure is wrong)
+            evaluation = self._parse_evaluation(reply_text)
+            if evaluation is None:
+                logger.warning(f"EA response had wrong structure, retrying. Raw:\n{reply_text[:500]}")
+                messages.append({"role": "assistant", "content": reply_text})
+                messages.append({"role": "user", "content": (
+                    "你的输出格式不正确。请严格只输出以下JSON，不要嵌套，不要添加任何其他字段：\n"
+                    '{"match_score": <数字>, "dimension_scores": {...}, "recommendation": "<文字>", "risk_flags": "<文字>"}'
+                )})
+                reply_text = await self.llm.simple_chat(messages)
+                evaluation = self._parse_evaluation(reply_text)
+                if evaluation is None:
+                    logger.error(f"EA response still invalid after retry. Raw:\n{reply_text}")
+                    raise ValueError(f"LLM returned invalid evaluation structure after retry")
 
             # 8. Save evaluation result
             pc = await evaluation_service.save_evaluation(
@@ -183,6 +191,22 @@ class EvaluatorAgent:
             except Exception as mark_err:
                 logger.error(f"Failed to mark evaluation as failed: {mark_err}")
             raise
+
+    def _parse_evaluation(self, reply_text: str) -> dict | None:
+        """Parse and validate LLM evaluation response. Returns None if structure is invalid."""
+        text = reply_text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        required = {"match_score", "dimension_scores", "recommendation", "risk_flags"}
+        if not required.issubset(data.keys()):
+            return None
+        return data
 
     def _build_evaluation_prompt(self, project, candidate, weight_context: dict, industry_context: str) -> str:
         requirement_str = json.dumps(project.requirement_profile or {}, ensure_ascii=False, indent=2)

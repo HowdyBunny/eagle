@@ -1,10 +1,25 @@
+import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import OnboardingModal from '@/components/shared/OnboardingModal'
+import { useAppStore } from '@/stores/app-store'
+import { useUIStore } from '@/stores/ui-store'
 
 export default function AppShell() {
   const { pathname } = useLocation()
+  const { llmApiKey, embeddingApiKey } = useAppStore()
+  const { openOnboarding } = useUIStore()
+
+  // Show onboarding on startup if either key is missing
+  useEffect(() => {
+    if (!llmApiKey || !embeddingApiKey) {
+      openOnboarding()
+    }
+  // Only run once on mount — intentionally omit changing deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="flex h-screen w-full bg-surface text-on-surface font-sans overflow-hidden">
@@ -26,6 +41,9 @@ export default function AppShell() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Onboarding modal — rendered above everything */}
+      <OnboardingModal />
     </div>
   )
 }

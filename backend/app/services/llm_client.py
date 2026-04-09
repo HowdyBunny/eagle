@@ -14,7 +14,7 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
 
 import json
 import os
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from app.config import settings
 from app.utils.logger import logger
@@ -48,6 +48,17 @@ except ImportError:
             def update_current_span(self, **kw): pass
             def set_current_trace_io(self, *a, **kw): pass
         return _Noop()
+
+
+# Human-readable labels shown in the frontend spinner when CA calls a tool
+TOOL_LABELS: dict[str, str] = {
+    "update_project": "正在更新项目信息...",
+    "clarify_requirement": "正在保存需求画像...",
+    "search_talent_pool": "正在搜索人才库...",
+    "trigger_evaluation": "正在评估候选人...",
+    "request_industry_research": "正在触发行业调研...",
+    "update_preference": "正在记录偏好反馈...",
+}
 
 
 def _openai_tools_to_anthropic(tools: list[dict]) -> list[dict]:
@@ -157,6 +168,36 @@ class LLMClient:
         )
         return result
 
+    async def agentic_loop_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        tool_executor: Any,
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Streaming variant of agentic_loop.
+
+        Yields dicts — the caller formats them as SSE:
+          {"type": "tool_call", "name": str, "label": str}
+              Emitted before each tool executes (spinner upgrade).
+          {"type": "text", "delta": str}
+              Final reply tokens streamed in real time.
+          {"type": "done", "reply_text": str,
+           "actions_taken": list[str], "intent_json": dict | None}
+              Stream complete; caller should persist reply_text.
+          {"type": "error", "message": str}
+              On unrecoverable failure.
+
+        Tool-call rounds block (non-streaming) so arguments arrive complete
+        before execution.  Only the final text round is truly streamed.
+        """
+        if self.provider == "anthropic":
+            gen = self._agentic_loop_stream_anthropic(messages, tools, tool_executor)
+        else:
+            gen = self._agentic_loop_stream_openai(messages, tools, tool_executor)
+        async for event in gen:
+            yield event
+
     # ── OpenAI implementations ──────────────────────────────────────────────
 
     async def _agentic_loop_openai(
@@ -222,6 +263,161 @@ class LLMClient:
         )
         return response.choices[0].message.content or ""
 
+    async def _agentic_loop_stream_openai(
+        self, messages: list[dict], tools: list[dict], tool_executor: Any,
+    ) -> AsyncGenerator[dict, None]:
+        actions_taken: list[str] = []
+        intent_json: dict | None = None
+        msgs = list(messages)
+
+        while True:
+            # Stream every LLM call. During tool-call rounds the text delta is
+            # typically empty, so no premature text gets shown to the user.
+            stream = await self._get_client().chat.completions.create(
+                model=settings.LLM_MODEL,
+                max_tokens=4096,
+                messages=msgs,
+                tools=tools,
+                tool_choice="auto",
+                stream=True,
+            )
+
+            content_chunks: list[str] = []
+            tool_calls_buffer: dict[int, dict] = {}  # index → {id, name, arguments}
+            is_tool_round = False
+            finish_reason: str | None = None
+
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                fr = chunk.choices[0].finish_reason
+                if fr:
+                    finish_reason = fr
+
+                # Accumulate tool_call fragments
+                if delta.tool_calls:
+                    is_tool_round = True
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_calls_buffer:
+                            tool_calls_buffer[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.id:
+                            tool_calls_buffer[idx]["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_calls_buffer[idx]["name"] += tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_calls_buffer[idx]["arguments"] += tc_delta.function.arguments
+
+                # Stream text immediately when this is the final text round
+                if delta.content and not is_tool_round:
+                    content_chunks.append(delta.content)
+                    yield {"type": "text", "delta": delta.content}
+
+            if finish_reason == "stop":
+                reply_text = "".join(content_chunks)
+                yield {"type": "done", "reply_text": reply_text,
+                       "actions_taken": actions_taken, "intent_json": intent_json}
+                return
+
+            elif finish_reason == "tool_calls":
+                # Build sorted tool call list from buffer
+                tool_calls_list = [
+                    {
+                        "id": tool_calls_buffer[i]["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tool_calls_buffer[i]["name"],
+                            "arguments": tool_calls_buffer[i]["arguments"],
+                        },
+                    }
+                    for i in sorted(tool_calls_buffer)
+                ]
+                msg_dict: dict = {
+                    "role": "assistant",
+                    "content": "".join(content_chunks) or None,
+                    "tool_calls": tool_calls_list,
+                }
+                msgs.append(msg_dict)
+
+                for tc in tool_calls_list:
+                    tool_name = tc["function"]["name"]
+                    tool_args = json.loads(tc["function"]["arguments"])
+                    label = TOOL_LABELS.get(tool_name, f"正在执行 {tool_name}...")
+                    yield {"type": "tool_call", "name": tool_name, "label": label}
+
+                    logger.info(f"CA stream tool call [{self.provider}]: {tool_name}")
+                    result = await tool_executor.execute(tool_name, tool_args)
+                    actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                    if intent_json is None:
+                        intent_json = {"action": tool_name, "params": tool_args}
+                    msgs.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": json.dumps(result, ensure_ascii=False, default=str),
+                    })
+                # loop continues → next LLM call
+
+            else:
+                # finish_reason is None (stream ended without proper signal from some proxies)
+                # or an unexpected value like "length" / "content_filter".
+                # Log it so we can diagnose, then recover gracefully.
+                logger.warning(
+                    f"[stream openai] unexpected finish_reason={finish_reason!r} "
+                    f"content_chunks={len(content_chunks)} tool_calls_buffer={list(tool_calls_buffer)}"
+                )
+                if content_chunks:
+                    # Stream ended abruptly but we already received text — treat as stop
+                    reply_text = "".join(content_chunks)
+                    yield {"type": "done", "reply_text": reply_text,
+                           "actions_taken": actions_taken, "intent_json": intent_json}
+                elif tool_calls_buffer:
+                    # Stream ended abruptly mid-tool-call — execute what we have and continue
+                    logger.warning("[stream openai] stream ended mid-tool-call, attempting recovery")
+                    tool_calls_list = [
+                        {
+                            "id": tool_calls_buffer[i]["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tool_calls_buffer[i]["name"],
+                                "arguments": tool_calls_buffer[i]["arguments"],
+                            },
+                        }
+                        for i in sorted(tool_calls_buffer)
+                        if tool_calls_buffer[i]["name"]  # skip incomplete entries
+                    ]
+                    if tool_calls_list:
+                        msg_dict = {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": tool_calls_list,
+                        }
+                        msgs.append(msg_dict)
+                        for tc in tool_calls_list:
+                            tool_name = tc["function"]["name"]
+                            tool_args = json.loads(tc["function"]["arguments"] or "{}")
+                            label = TOOL_LABELS.get(tool_name, f"正在执行 {tool_name}...")
+                            yield {"type": "tool_call", "name": tool_name, "label": label}
+                            logger.info(f"CA stream tool call (recovery) [{self.provider}]: {tool_name}")
+                            result = await tool_executor.execute(tool_name, tool_args)
+                            actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                            if intent_json is None:
+                                intent_json = {"action": tool_name, "params": tool_args}
+                            msgs.append({
+                                "role": "tool",
+                                "tool_call_id": tc["id"],
+                                "content": json.dumps(result, ensure_ascii=False, default=str),
+                            })
+                        # loop continues
+                        continue
+                    else:
+                        yield {"type": "error", "message": f"流异常终止（{finish_reason}），请重试。"}
+                        return
+                else:
+                    yield {"type": "error", "message": f"流异常终止（{finish_reason}），请重试。"}
+                    return
+
     async def _research_chat_openai(self, messages: list[dict], max_tokens: int) -> str:
         # Responses API requires string input (verified with geekai.co proxy).
         # Passing a messages list causes "Missing required parameter: 'input'" on some proxies.
@@ -239,6 +435,117 @@ class LLMClient:
         return response.output_text
 
     # ── Anthropic implementations ───────────────────────────────────────────
+
+    async def _agentic_loop_stream_anthropic(
+        self, messages: list[dict], tools: list[dict], tool_executor: Any,
+    ) -> AsyncGenerator[dict, None]:
+        anthropic_tools = _openai_tools_to_anthropic(tools)
+        system, msgs = _extract_system(messages)
+        actions_taken: list[str] = []
+        intent_json: dict | None = None
+
+        while True:
+            client = self._get_client()
+            content_blocks: dict[int, dict] = {}  # index → accumulated block data
+            stop_reason: str | None = None
+
+            # Stream using raw SSE events
+            async with client.messages.stream(  # type: ignore[union-attr]
+                model=settings.LLM_MODEL,
+                max_tokens=4096,
+                system=system,
+                messages=msgs,
+                tools=anthropic_tools,
+            ) as stream:
+                async for event in stream:
+                    if event.type == "content_block_start":
+                        idx = event.index
+                        block = event.content_block
+                        content_blocks[idx] = {
+                            "type": block.type,
+                            "text": "",
+                            "partial_json": "",
+                            "id": getattr(block, "id", ""),
+                            "name": getattr(block, "name", ""),
+                        }
+
+                    elif event.type == "content_block_delta":
+                        idx = event.index
+                        delta = event.delta
+                        if delta.type == "text_delta":
+                            content_blocks[idx]["text"] += delta.text
+                            yield {"type": "text", "delta": delta.text}
+                        elif delta.type == "input_json_delta":
+                            content_blocks[idx]["partial_json"] += delta.partial_json
+
+                    elif event.type == "message_delta":
+                        stop_reason = event.delta.stop_reason
+
+            if stop_reason == "end_turn":
+                reply_text = "".join(
+                    b["text"] for b in content_blocks.values() if b["type"] == "text"
+                )
+                yield {"type": "done", "reply_text": reply_text,
+                       "actions_taken": actions_taken, "intent_json": intent_json}
+                return
+
+            elif stop_reason == "tool_use":
+                # Rebuild assistant content blocks for the next turn
+                assistant_content = []
+                for idx in sorted(content_blocks):
+                    b = content_blocks[idx]
+                    if b["type"] == "text":
+                        assistant_content.append({"type": "text", "text": b["text"]})
+                    elif b["type"] == "tool_use":
+                        try:
+                            parsed_input = json.loads(b["partial_json"]) if b["partial_json"] else {}
+                        except json.JSONDecodeError:
+                            parsed_input = {}
+                        assistant_content.append({
+                            "type": "tool_use",
+                            "id": b["id"],
+                            "name": b["name"],
+                            "input": parsed_input,
+                        })
+                msgs.append({"role": "assistant", "content": assistant_content})
+
+                tool_results = []
+                for block in assistant_content:
+                    if block["type"] != "tool_use":
+                        continue
+                    tool_name = block["name"]
+                    tool_args = block["input"]
+                    label = TOOL_LABELS.get(tool_name, f"正在执行 {tool_name}...")
+                    yield {"type": "tool_call", "name": tool_name, "label": label}
+
+                    logger.info(f"CA stream tool call [{self.provider}]: {tool_name}")
+                    result = await tool_executor.execute(tool_name, tool_args)
+                    actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                    if intent_json is None:
+                        intent_json = {"action": tool_name, "params": tool_args}
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": json.dumps(result, ensure_ascii=False, default=str),
+                    })
+                msgs.append({"role": "user", "content": tool_results})
+                # loop continues → next LLM call
+
+            else:
+                # stop_reason is None or unexpected — log and recover
+                text_so_far = "".join(
+                    b["text"] for b in content_blocks.values() if b["type"] == "text"
+                )
+                logger.warning(
+                    f"[stream anthropic] unexpected stop_reason={stop_reason!r} "
+                    f"text_len={len(text_so_far)} blocks={list(content_blocks)}"
+                )
+                if text_so_far:
+                    yield {"type": "done", "reply_text": text_so_far,
+                           "actions_taken": actions_taken, "intent_json": intent_json}
+                else:
+                    yield {"type": "error", "message": f"流异常终止（{stop_reason}），请重试。"}
+                return
 
     async def _agentic_loop_anthropic(
         self, messages: list[dict], tools: list[dict], tool_executor: Any,

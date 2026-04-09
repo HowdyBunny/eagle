@@ -8,6 +8,7 @@ Two-layer architecture:
 
 import json
 import uuid
+from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -191,3 +192,66 @@ class CoordinatorAgent:
             intent_json=intent_json,
             actions_taken=actions_taken,
         )
+
+    async def chat_stream(
+        self, project_id: uuid.UUID, user_message: str
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Streaming version of chat().
+
+        Yields the same event dicts as LLMClient.agentic_loop_stream(), with one
+        addition: the final "done" event is enriched with a `conversation_id`
+        after the assistant reply has been persisted to the database.
+        """
+        # 1–4: identical setup to chat()
+        project = await project_service.get_project(self.db, project_id)
+        project_context = ""
+        if project:
+            project_context = (
+                f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
+                f"\n- 项目名: {project.project_name}\n- 模式: {project.mode.value}"
+                f"\n- 状态: {project.status.value}"
+            )
+            if project.requirement_profile:
+                project_context += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
+            if project.client_name == "待 CA 解析":
+                project_context += (
+                    f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
+                    f"你的下一步动作必须是调用 `update_project`（project_id={project.id}），"
+                    f"从猎头消息中提取真实客户名和岗位名后立即调用，不得跳过。**"
+                )
+
+        messages: list[dict] = [
+            {"role": "system", "content": CA_SYSTEM_PROMPT + project_context},
+        ]
+
+        history = await conversation_service.get_history(self.db, project_id, limit=20)
+        for log in history:
+            messages.append({
+                "role": "user" if log.role == ConversationRole.HUNTER else "assistant",
+                "content": log.content,
+            })
+
+        messages.append({"role": "user", "content": user_message})
+        await conversation_service.save_message(
+            self.db, project_id, ConversationRole.HUNTER, user_message
+        )
+
+        # 5. Run streaming agentic loop
+        tool_executor = ToolExecutor(self.db, current_project_id=project_id)
+        reply_text = ""
+
+        async for event in self.llm.agentic_loop_stream(messages, CA_TOOLS, tool_executor):
+            if event["type"] == "text":
+                reply_text += event["delta"]
+
+            if event["type"] == "done":
+                # Persist assistant reply before yielding done to the client
+                log = await conversation_service.save_message(
+                    self.db, project_id, ConversationRole.ASSISTANT,
+                    event["reply_text"], event.get("intent_json"),
+                )
+                yield {**event, "conversation_id": str(log.id)}
+                return
+
+            yield event

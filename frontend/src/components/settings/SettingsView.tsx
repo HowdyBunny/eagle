@@ -51,6 +51,7 @@ function SecretInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        autoComplete="new-password"
         className={`${monoInputClass} pr-12`}
       />
       <button

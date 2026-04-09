@@ -17,5 +17,11 @@ export default defineConfig({
       'http://localhost:8000/*',
       'http://127.0.0.1:8000/*',
     ],
+    web_accessible_resources: [
+      {
+        resources: ['icon/*.png'],
+        matches: ['https://www.linkedin.com/*', 'https://www.liepin.com/*'],
+      },
+    ],
   },
 });

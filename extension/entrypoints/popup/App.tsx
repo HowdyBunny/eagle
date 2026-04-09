@@ -78,6 +78,7 @@ export default function App() {
             value={apiKey}
             onChange={(e) => setApiKeyState(e.target.value)}
             placeholder="在 .env 中配置的 API_KEY"
+            autoComplete="new-password"
             className="w-full rounded-lg border border-eagle-border px-3 py-2 text-sm text-eagle-ink placeholder-eagle-ink/30
               focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
           />

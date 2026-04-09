@@ -5,9 +5,11 @@ import type { ConversationLogResponse } from '@/types'
 
 interface AgentBubbleProps {
   message: ConversationLogResponse
+  /** When true, renders a blinking cursor after the content */
+  isStreaming?: boolean
 }
 
-export default function AgentBubble({ message }: AgentBubbleProps) {
+export default function AgentBubble({ message, isStreaming = false }: AgentBubbleProps) {
   const [showActions, setShowActions] = useState(false)
   const hasActions = message.intent_json != null
 
@@ -31,6 +33,9 @@ export default function AgentBubble({ message }: AgentBubbleProps) {
             prose-strong:text-on-surface prose-code:bg-surface-container-low prose-code:px-1 prose-code:rounded
             prose-ul:text-sm prose-li:text-sm">
             <ReactMarkdown>{message.content}</ReactMarkdown>
+            {isStreaming && (
+              <span className="inline-block w-[2px] h-[1em] bg-primary align-middle ml-0.5 animate-pulse" />
+            )}
           </div>
 
           {/* Agent actions */}

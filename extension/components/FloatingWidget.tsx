@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+const eagleIconUrl = browser.runtime.getURL('/icon/32.png');
 import type { CandidateData, Candidate, EvaluationStatus, Project } from '../lib/types';
 import { extractCandidateData, waitForProfile } from '../lib/parsers/index';
 import { sendMessage } from '../lib/messaging';
@@ -316,22 +317,7 @@ export function FloatingWidget() {
 // --- Icons ---
 function EagleLogo({ small }: { small?: boolean }) {
   const size = small ? 22 : 26;
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="eagleGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#e8d08d" />
-          <stop offset="50%" stopColor="#c5a028" />
-          <stop offset="100%" stopColor="#8a6d1c" />
-        </linearGradient>
-      </defs>
-      <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill="url(#eagleGoldGrad)" opacity="0.25" />
-      <polygon points="50,10 88,32 88,68 50,90 12,68 12,32" fill="url(#eagleGoldGrad)" />
-      <path d="M 30 45 Q 45 35 65 40 Q 75 45 85 60 Q 70 50 60 55 Q 55 65 45 75 Q 35 60 30 45 Z" fill="#ffffff" />
-      <circle cx="55" cy="45" r="3" fill="#745b00" />
-      <path d="M 65 40 Q 75 40 85 45 Q 75 48 65 45 Z" fill="#ffffff" />
-    </svg>
-  );
+  return <img src={eagleIconUrl} width={size} height={size} style={{ objectFit: 'contain' }} alt="Eagle" />;
 }
 
 function MinimizeIcon() {

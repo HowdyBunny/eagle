@@ -5,6 +5,10 @@ import * as conversationsApi from '@/lib/api/conversations'
 interface ChatState {
   messages: ConversationLogResponse[]
   sending: boolean
+  /** Partial text accumulated during streaming (empty when not streaming) */
+  streamingContent: string
+  /** Current tool label shown in the spinner (null when not executing a tool) */
+  streamingStatus: string | null
   error: string | null
   _loadedProjectId: string | null
   _sendingProjectId: string | null
@@ -16,13 +20,13 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   sending: false,
+  streamingContent: '',
+  streamingStatus: null,
   error: null,
   _loadedProjectId: null,
   _sendingProjectId: null,
 
   loadHistory: async (projectId) => {
-    // Only clear messages when switching to a different project.
-    // Returning to the same project keeps existing messages visible during reload.
     if (get()._loadedProjectId !== projectId) {
       set({ messages: [], error: null })
     }
@@ -45,29 +49,71 @@ export const useChatStore = create<ChatState>((set, get) => ({
       intent_json: null,
       created_at: new Date().toISOString(),
     }
-    set({ messages: [...get().messages, optimisticMsg], sending: true, _sendingProjectId: projectId, error: null })
+    set({
+      messages: [...get().messages, optimisticMsg],
+      sending: true,
+      streamingContent: '',
+      streamingStatus: null,
+      _sendingProjectId: projectId,
+      error: null,
+    })
 
     try {
-      const response = await conversationsApi.sendChat(projectId, { message })
-      // If the user switched to a different project while waiting, don't corrupt
-      // the new project's message list. The reply is already saved on the backend.
-      if (get()._loadedProjectId !== projectId) {
-        set({ sending: false, _sendingProjectId: null })
-        return
+      const stream = conversationsApi.sendChatStream(projectId, message)
+
+      for await (const event of stream) {
+        // If the user switched project mid-stream, abort silently.
+        if (get()._loadedProjectId !== projectId) {
+          set({ sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
+          return
+        }
+
+        if (event.type === 'tool_call') {
+          set({ streamingStatus: event.label, streamingContent: '' })
+        }
+
+        if (event.type === 'text') {
+          set({ streamingStatus: null, streamingContent: get().streamingContent + event.delta })
+        }
+
+        if (event.type === 'done') {
+          // reply_text can be empty if the LLM silently completed after a tool call.
+          // Skip adding an invisible empty bubble in that case.
+          const newMessages = event.reply_text
+            ? [
+                ...get().messages,
+                {
+                  id: event.conversation_id,
+                  project_id: projectId,
+                  role: 'assistant' as const,
+                  content: event.reply_text,
+                  intent_json: event.intent_json,
+                  created_at: new Date().toISOString(),
+                },
+              ]
+            : get().messages
+          set({
+            messages: newMessages,
+            sending: false,
+            streamingContent: '',
+            streamingStatus: null,
+            _sendingProjectId: null,
+          })
+          return
+        }
+
+        if (event.type === 'error') {
+          set({ error: event.message, sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
+          return
+        }
       }
-      const assistantMsg: ConversationLogResponse = {
-        id: `assistant-${Date.now()}`,
-        project_id: projectId,
-        role: 'assistant',
-        content: response.reply,
-        intent_json: response.intent_json,
-        created_at: new Date().toISOString(),
-      }
-      set({ messages: [...get().messages, assistantMsg], sending: false, _sendingProjectId: null })
+
+      // Stream ended without a done event (shouldn't happen, handle gracefully)
+      set({ sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
     } catch (e) {
-      set({ error: String(e), sending: false, _sendingProjectId: null })
+      set({ error: String(e), sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
     }
   },
 
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], streamingContent: '', streamingStatus: null }),
 }))

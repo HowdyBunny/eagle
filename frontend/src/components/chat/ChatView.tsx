@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useAppStore } from '@/stores/app-store'
+import { useUIStore } from '@/stores/ui-store'
 import { useChatStore } from '@/stores/chat-store'
 import { bootstrapProject, type BootstrapEvent } from '@/lib/ws-bootstrap'
 import AgentBubble from './AgentBubble'
@@ -9,19 +11,17 @@ import ProjectIntroBubble from './ProjectIntroBubble'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 
 export default function ChatView() {
-  const { currentProjectId, currentProject, authApiKey, selectProject } = useAppStore()
-  const { messages, sending, _sendingProjectId, loadHistory, sendMessage } = useChatStore()
+  const { currentProjectId, currentProject, authApiKey, selectProject, llmApiKey, embeddingApiKey } = useAppStore()
+  const { openOnboarding } = useUIStore()
+  const settingsOk = Boolean(llmApiKey && embeddingApiKey)
+  const { messages, sending, streamingContent, streamingStatus, error: storeError, _sendingProjectId, loadHistory, sendMessage } = useChatStore()
   const isSendingHere = sending && _sendingProjectId === currentProjectId
   const bottomRef = useRef<HTMLDivElement>(null)
   const [bootstrapping, setBootstrapping] = useState(false)
   const [bootstrapStatus, setBootstrapStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
-
-  // Cleanup WS on unmount
-  useEffect(() => {
-    return () => { cleanupRef.current?.() }
-  }, [])
+  const bootstrapDoneRef = useRef(false)
 
   // Reload history whenever the bound project changes (1:1 conversation).
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function ChatView() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, bootstrapping])
+  }, [messages, bootstrapping, streamingContent])
 
   const handleBootstrapEvent = useCallback((event: BootstrapEvent) => {
     switch (event.type) {
@@ -58,6 +58,7 @@ export default function ChatView() {
         break
 
       case 'done': {
+        bootstrapDoneRef.current = true
         setBootstrapping(false)
         setBootstrapStatus(null)
         // Reload history from the project that was created
@@ -67,6 +68,7 @@ export default function ChatView() {
       }
 
       case 'error':
+        bootstrapDoneRef.current = true
         setError(event.message ?? '未知错误')
         setBootstrapping(false)
         setBootstrapStatus(null)
@@ -76,6 +78,11 @@ export default function ChatView() {
 
   const handleSend = async (message: string) => {
     setError(null)
+    // Guard: open onboarding if LLM or Embedding is not configured
+    if (!settingsOk) {
+      openOnboarding()
+      return
+    }
     // Normal case: project already bound, just chat.
     if (currentProjectId) {
       sendMessage(currentProjectId, message)
@@ -87,13 +94,21 @@ export default function ChatView() {
     // All streamed as structured events with real-time progress
     setBootstrapping(true)
     setBootstrapStatus('正在连接…')
+    bootstrapDoneRef.current = false
 
-    cleanupRef.current = bootstrapProject(
+    const cleanup = bootstrapProject(
       message,
       authApiKey,
       'precise',
-      handleBootstrapEvent,
+      (event) => {
+        handleBootstrapEvent(event)
+        // Only close WS after the flow completes — not on component unmount
+        if (event.type === 'done' || event.type === 'error') {
+          cleanup()
+        }
+      },
     )
+    cleanupRef.current = cleanup
   }
 
   return (
@@ -126,28 +141,68 @@ export default function ChatView() {
           )
         )}
 
-        {(isSendingHere || bootstrapping) && (
+        {/* Streaming text bubble — shown while final reply is being streamed */}
+        {isSendingHere && streamingContent && (
+          <AgentBubble
+            message={{
+              id: 'streaming',
+              project_id: currentProjectId ?? '',
+              role: 'assistant',
+              content: streamingContent,
+              intent_json: null,
+              created_at: new Date().toISOString(),
+            }}
+            isStreaming
+          />
+        )}
+
+        {/* Spinner — shown during tool execution or while waiting for first token */}
+        {((isSendingHere && !streamingContent) || bootstrapping) && (
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-full kinetic-gradient flex items-center justify-center">
               <span className="text-white text-xs font-bold">CA</span>
             </div>
             <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-tr-3xl rounded-br-3xl rounded-bl-lg border-l-4 border-l-primary px-5 py-4">
               <LoadingSpinner size="sm" />
-              {bootstrapping && (
-                <p className="text-[11px] text-secondary mt-2">{bootstrapStatus ?? '正在为你建立项目…'}</p>
-              )}
+              <p className="text-[11px] text-secondary mt-2">
+                {bootstrapping
+                  ? (bootstrapStatus ?? '正在为你建立项目…')
+                  : (streamingStatus ?? 'CA 正在思考…')}
+              </p>
             </div>
           </div>
         )}
 
-        {error && (
+        {(error || storeError) && (
           <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
-            {error}
+            {error || storeError}
           </div>
         )}
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Settings-missing banner — only shown when LLM/Embedding not configured */}
+      {!settingsOk && (
+        <div className="mx-6 mb-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
+            <span className="text-xs text-amber-700 truncate">
+              {!llmApiKey && !embeddingApiKey
+                ? 'LLM 和 Embedding 均未配置，CA 无法响应'
+                : !llmApiKey
+                ? 'LLM API Key 未配置，CA 无法响应'
+                : 'Embedding API Key 未配置，候选人搜索不可用'}
+            </span>
+          </div>
+          <button
+            onClick={openOnboarding}
+            className="flex-shrink-0 text-xs font-bold text-amber-700 underline underline-offset-2 hover:text-amber-900 transition-colors"
+          >
+            立即配置
+          </button>
+        </div>
+      )}
 
       <ChatInput onSend={handleSend} disabled={isSendingHere || bootstrapping} />
     </div>
