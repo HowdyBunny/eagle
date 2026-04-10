@@ -25,14 +25,6 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSIONS: int = 1536
 
-    # Langfuse observability — optional (leave blank to disable)
-    LANGFUSE_PUBLIC_KEY: str = ""
-    LANGFUSE_SECRET_KEY: str = ""
-    LANGFUSE_HOST: str = ""  # e.g. https://cloud.langfuse.com or your self-hosted URL
-
-    # Auth
-    API_KEY: str  # X-API-Key header value for authenticating requests
-
     # App
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: list[str] = ["*"]

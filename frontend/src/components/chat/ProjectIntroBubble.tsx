@@ -25,7 +25,7 @@ export default function ProjectIntroBubble() {
             建立项目。
           </p>
           <p className="text-[11px] text-secondary mt-2 italic">
-            例：「帮我给某新能源科技公司招一个高级电池管理系统工程师，
+            例：「我在给某新能源科技公司招一个高级电池管理系统工程师，
             要求 5 年以上 BMS 经验，熟悉 AUTOSAR…」
           </p>
         </div>

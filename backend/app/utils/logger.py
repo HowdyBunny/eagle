@@ -19,5 +19,18 @@ logger.add(
     compression="zip",
     enqueue=True,
 )
+# Dedicated LLM trace sink — one JSON object per line, filtered by extra["llm_trace"].
+# Read with: tail -f logs/llm_trace.jsonl | python -m json.tool
+# or:        cat logs/llm_trace.jsonl | jq 'select(.method=="agentic_loop_stream")'
+logger.add(
+    "logs/llm_trace.jsonl",
+    level="DEBUG",
+    filter=lambda r: r["extra"].get("llm_trace", False),
+    format="{message}",
+    rotation="20 MB",
+    retention="14 days",
+    compression="zip",
+    enqueue=True,
+)
 
 __all__ = ["logger"]

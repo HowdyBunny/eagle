@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { ExternalLink, Star, Pencil, Trash2, X, Save, RotateCcw, Briefcase, GraduationCap, MapPin, Clock, DollarSign, AlertTriangle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ExternalLink, Star, Pencil, Trash2, X, Save, RotateCcw, Briefcase, GraduationCap, MapPin, Clock, DollarSign, AlertTriangle, ClipboardList } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
-import type { CandidateResponse, CandidateUpdate } from '@/types'
+import { listCandidateEvaluations } from '@/lib/api/evaluations'
+import MatchDonut from '@/components/shared/MatchDonut'
+import type { CandidateResponse, CandidateUpdate, CandidateEvaluationResponse } from '@/types'
 
 interface CandidateDetailSheetProps {
   candidate: CandidateResponse | null
@@ -25,6 +27,22 @@ function parseExperiences(raw: Record<string, unknown> | null | undefined): Expe
 }
 
 // ── Read-only detail pane ──────────────────────────────────────────────────
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  extension: { label: '插件', color: 'bg-purple-100 text-purple-700' },
+  ca: { label: 'Agent', color: 'bg-blue-100 text-blue-700' },
+  talent_pool: { label: '人才库', color: 'bg-green-100 text-green-700' },
+}
+
+function TriggerSourceBadge({ source }: { source: string | null }) {
+  if (!source) return null
+  const info = SOURCE_LABELS[source] ?? { label: source, color: 'bg-zinc-100 text-zinc-600' }
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${info.color}`}>
+      {info.label}
+    </span>
+  )
+}
+
 function DetailView({
   candidate,
   onEdit,
@@ -36,6 +54,13 @@ function DetailView({
 }) {
   const confidence = candidate.confidence_score ?? 0
   const experiences = parseExperiences(candidate.raw_structured_data)
+  const [evaluations, setEvaluations] = useState<CandidateEvaluationResponse[]>([])
+
+  useEffect(() => {
+    listCandidateEvaluations(candidate.id)
+      .then(setEvaluations)
+      .catch(() => {})
+  }, [candidate.id])
 
   return (
     <div className="flex flex-col h-full">
@@ -182,6 +207,44 @@ function DetailView({
                   <ExternalLink size={13} /> 猎聘
                 </a>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Evaluation history */}
+        {evaluations.length > 0 && (
+          <section>
+            <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-secondary mb-3">
+              <ClipboardList size={12} /> 评估历史
+            </h3>
+            <div className="space-y-2">
+              {evaluations.map((ev) => (
+                <div
+                  key={ev.id}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-surface-container-low border border-outline-variant/10"
+                >
+                  <div className="relative shrink-0 flex items-center justify-center" style={{ width: 40, height: 40 }}>
+                    <MatchDonut score={ev.match_score ?? 0} size={40} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-on-surface truncate">{ev.project_name}</span>
+                      <TriggerSourceBadge source={ev.trigger_source} />
+                    </div>
+                    <p className="text-[11px] text-secondary truncate">{ev.client_name}</p>
+                    {ev.recommendation && (
+                      <p className="text-[11px] text-secondary/70 mt-0.5 line-clamp-1">
+                        {ev.recommendation.slice(0, 60)}{ev.recommendation.length > 60 ? '…' : ''}
+                      </p>
+                    )}
+                  </div>
+                  {ev.evaluated_at && (
+                    <span className="text-[10px] text-secondary/50 shrink-0">
+                      {new Date(ev.evaluated_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         )}

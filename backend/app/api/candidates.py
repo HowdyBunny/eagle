@@ -3,10 +3,10 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult
-from app.services import candidate_service
+from app.schemas.evaluation import CandidateEvaluationResponse
+from app.services import candidate_service, evaluation_service
 from app.services.search_service import SearchService
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -17,7 +17,7 @@ async def create_candidate(
     data: CandidateCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     candidate = await candidate_service.create_candidate(db, data)
     # Embed experience_summary in background
@@ -37,7 +37,7 @@ async def list_candidates(
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     return await candidate_service.list_candidates(
         db,
@@ -54,7 +54,7 @@ async def list_candidates(
 async def get_candidate(
     candidate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     candidate = await candidate_service.get_candidate(db, candidate_id)
     if not candidate:
@@ -68,7 +68,7 @@ async def update_candidate(
     data: CandidateUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     candidate = await candidate_service.update_candidate(db, candidate_id, data)
     if not candidate:
@@ -85,18 +85,45 @@ async def update_candidate(
 async def delete_candidate(
     candidate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     deleted = await candidate_service.delete_candidate(db, candidate_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
 
+@router.get("/{candidate_id}/evaluations", response_model=list[CandidateEvaluationResponse])
+async def list_candidate_evaluations(
+    candidate_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+
+):
+    candidate = await candidate_service.get_candidate(db, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    pcs = await evaluation_service.list_candidate_evaluations(db, candidate_id)
+    return [
+        CandidateEvaluationResponse(
+            id=pc.id,
+            project_id=pc.project_id,
+            project_name=pc.project.project_name,
+            client_name=pc.project.client_name,
+            match_score=pc.match_score,
+            recommendation=pc.recommendation,
+            risk_flags=pc.risk_flags,
+            trigger_source=pc.trigger_source,
+            status=pc.status,
+            evaluated_at=pc.evaluated_at,
+        )
+        for pc in pcs
+    ]
+
+
 @router.post("/search", response_model=list[CandidateSearchResult])
 async def search_candidates(
     request: CandidateSearchRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     svc = SearchService()
     return await svc.hybrid_search(db, request)

@@ -16,3 +16,6 @@ pnpm build        # prod bundle into dist/
 
 extension一样
 cd extension
+
+License
+This project is licensed under the AGPL-3.0 License - see the LICENSE file for details.

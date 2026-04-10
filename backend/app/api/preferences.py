@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.preference import PreferenceCreate, PreferenceResponse
 from app.services import project_service, preference_service
@@ -16,7 +15,7 @@ async def add_preference(
     project_id: uuid.UUID,
     data: PreferenceCreate,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -28,7 +27,7 @@ async def add_preference(
 async def list_preferences(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:

@@ -7,10 +7,9 @@ agent call because LLMClient and EmbeddingService read from the singleton
 `settings` object at call time.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.auth import verify_api_key
 from app.config import settings
 
 router = APIRouter(tags=["settings"])
@@ -41,7 +40,6 @@ class RuntimeSettingsResponse(BaseModel):
 @router.put("/settings")
 async def update_runtime_settings(
     data: RuntimeSettingsUpdate,
-    _: str = Depends(verify_api_key),
 ):
     """Hot-update LLM and Embedding config at runtime. No restart needed."""
     if data.llm_provider is not None:
@@ -66,7 +64,7 @@ async def update_runtime_settings(
 
 
 @router.get("/settings", response_model=RuntimeSettingsResponse)
-async def get_runtime_settings(_: str = Depends(verify_api_key)):
+async def get_runtime_settings():
     """Return current runtime settings (secrets are excluded)."""
     return RuntimeSettingsResponse(
         llm_provider=settings.LLM_PROVIDER,

@@ -18,7 +18,7 @@ export default defineBackground(() => {
 
 async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
   try {
-    const { apiUrl, apiKey } = await getSettings();
+    const { apiUrl } = await getSettings();
 
     switch (msg.type) {
       case 'TEST_CONNECTION': {
@@ -31,7 +31,6 @@ async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
       case 'FETCH_PROJECTS': {
         const data = await apiFetch<Project[]>(
           `${apiUrl}/api/projects?limit=100`,
-          apiKey,
           { method: 'GET' }
         );
         return { success: true, data };
@@ -40,7 +39,6 @@ async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
       case 'SUBMIT_CANDIDATE': {
         const data = await apiFetch<Candidate>(
           `${apiUrl}/api/candidates`,
-          apiKey,
           { method: 'POST', body: JSON.stringify(msg.payload) }
         );
         return { success: true, data };
@@ -50,7 +48,6 @@ async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
         const { projectId, candidateId } = msg.payload;
         const data = await apiFetch(
           `${apiUrl}/api/projects/${projectId}/evaluate/${candidateId}`,
-          apiKey,
           { method: 'POST' }
         );
         return { success: true, data };
@@ -60,7 +57,6 @@ async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
         const { projectId, candidateId } = msg.payload;
         const data = await apiFetch<EvaluationStatus>(
           `${apiUrl}/api/projects/${projectId}/candidates/${candidateId}/status`,
-          apiKey,
           { method: 'GET' }
         );
         return { success: true, data };
@@ -76,19 +72,17 @@ async function handleMessage(msg: MessageRequest): Promise<MessageResponse> {
 
 async function apiFetch<T>(
   url: string,
-  apiKey: string,
   options: RequestInit
 ): Promise<T> {
   const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': apiKey,
       ...options.headers,
     },
   });
 
-  if (res.status === 401) throw new Error('Invalid API key. Check extension settings.');
+  if (res.status === 401) throw new Error('Unauthorized.');
   if (res.status === 404) throw new Error('Resource not found.');
   if (res.status === 422) {
     const body = await res.json().catch(() => ({}));

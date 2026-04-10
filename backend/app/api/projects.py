@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.services import project_service
@@ -16,7 +15,7 @@ async def create_project(
     data: ProjectCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.create_project(db, data)
     # Embed requirement_profile in background if present
@@ -32,7 +31,7 @@ async def list_projects(
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     return await project_service.list_projects(db, skip=skip, limit=limit)
 
@@ -41,7 +40,7 @@ async def list_projects(
 async def get_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -55,7 +54,7 @@ async def update_project(
     data: ProjectUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.update_project(db, project_id, data)
     if not project:
@@ -72,7 +71,7 @@ async def update_project(
 async def delete_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     deleted = await project_service.delete_project(db, project_id)
     if not deleted:

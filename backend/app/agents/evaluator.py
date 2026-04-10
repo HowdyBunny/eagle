@@ -128,7 +128,7 @@ class EvaluatorAgent:
         self.db = db
         self.embedding_svc = EmbeddingService()
 
-    async def evaluate(self, project_id: uuid.UUID, candidate_id: uuid.UUID) -> ProjectCandidate:
+    async def evaluate(self, project_id: uuid.UUID, candidate_id: uuid.UUID, trigger_source: str | None = None) -> ProjectCandidate:
         try:
             # 1. Load project requirements
             project = await project_service.get_project(self.db, project_id)
@@ -157,6 +157,7 @@ class EvaluatorAgent:
             reply_text = await self.llm.simple_chat(messages)
 
             # 7. Parse JSON response (with one retry if structure is wrong)
+            raw_output = reply_text
             evaluation = self._parse_evaluation(reply_text)
             if evaluation is None:
                 logger.warning(f"EA response had wrong structure, retrying. Raw:\n{reply_text[:500]}")
@@ -166,6 +167,7 @@ class EvaluatorAgent:
                     '{"match_score": <数字>, "dimension_scores": {...}, "recommendation": "<文字>", "risk_flags": "<文字>"}'
                 )})
                 reply_text = await self.llm.simple_chat(messages)
+                raw_output = reply_text
                 evaluation = self._parse_evaluation(reply_text)
                 if evaluation is None:
                     logger.error(f"EA response still invalid after retry. Raw:\n{reply_text}")
@@ -180,6 +182,8 @@ class EvaluatorAgent:
                 dimension_scores=evaluation["dimension_scores"],
                 recommendation=evaluation["recommendation"],
                 risk_flags=evaluation["risk_flags"],
+                trigger_source=trigger_source,
+                llm_raw_output=raw_output,
             )
             logger.info(f"EA evaluated candidate {candidate_id} for project {project_id}: score={evaluation['match_score']}")
             return pc

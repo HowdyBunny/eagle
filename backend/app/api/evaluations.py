@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.evaluation import EvaluationStatusResponse, ProjectCandidateResponse, ProjectCandidateUpdate
 from app.services import candidate_service, evaluation_service, project_service
@@ -17,7 +16,7 @@ async def trigger_evaluation(
     candidate_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -31,7 +30,7 @@ async def trigger_evaluation(
 
     from app.agents.evaluator import EvaluatorAgent
     agent = EvaluatorAgent(db)
-    background_tasks.add_task(agent.evaluate, project_id, candidate_id)
+    background_tasks.add_task(agent.evaluate, project_id, candidate_id, "extension")
 
     return {
         "message": "Evaluation triggered",
@@ -47,7 +46,7 @@ async def get_evaluation_status(
     project_id: uuid.UUID,
     candidate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     """
     Poll this endpoint every 5s after triggering an evaluation.
@@ -78,7 +77,7 @@ async def list_project_candidates(
     project_id: uuid.UUID,
     sort_by_score: bool = True,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -91,7 +90,7 @@ async def link_candidate_to_project(
     project_id: uuid.UUID,
     candidate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     """Link a candidate to a project without triggering evaluation."""
     project = await project_service.get_project(db, project_id)
@@ -115,7 +114,7 @@ async def update_project_candidate(
     candidate_id: uuid.UUID,
     data: ProjectCandidateUpdate,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     pc = await evaluation_service.update_project_candidate(db, project_id, candidate_id, data)
     if not pc:

@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.ontology import OntologyResponse
 from app.services import ontology_service
@@ -17,7 +16,7 @@ async def list_ontology(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     return await ontology_service.list_ontology(db, industry=industry, skip=skip, limit=limit)
 
@@ -26,7 +25,7 @@ async def list_ontology(
 async def get_ontology(
     ontology_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     entry = await ontology_service.get_ontology(db, ontology_id)
     if not entry:

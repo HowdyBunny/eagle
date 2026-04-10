@@ -1,24 +1,21 @@
 import { useState, useEffect } from 'react';
 import eagleIcon from '/wxt.svg';
-import { getApiUrl, getApiKey, setApiUrl, setApiKey } from '../../lib/storage';
+import { getApiUrl, setApiUrl } from '../../lib/storage';
 
 type ConnectionStatus = 'unknown' | 'testing' | 'ok' | 'error';
 
 export default function App() {
   const [apiUrl, setApiUrlState] = useState('http://localhost:8000');
-  const [apiKey, setApiKeyState] = useState('');
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('unknown');
   const [connError, setConnError] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     getApiUrl().then(setApiUrlState);
-    getApiKey().then(setApiKeyState);
   }, []);
 
   const handleSave = async () => {
     await setApiUrl(apiUrl.trim());
-    await setApiKey(apiKey.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -66,23 +63,6 @@ export default function App() {
               focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
           />
           <p className="text-xs text-eagle-ink/40">Eagle 后端服务地址，默认 localhost:8000</p>
-        </div>
-
-        {/* API Key */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-eagle-primary">
-            API Key
-          </label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKeyState(e.target.value)}
-            placeholder="在 .env 中配置的 API_KEY"
-            autoComplete="new-password"
-            className="w-full rounded-lg border border-eagle-border px-3 py-2 text-sm text-eagle-ink placeholder-eagle-ink/30
-              focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
-          />
-          <p className="text-xs text-eagle-ink/40">对应后端 .env 中的 API_KEY 变量</p>
         </div>
 
         {/* Connection test */}

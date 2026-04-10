@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, JSON, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, UUIDString
@@ -34,6 +34,8 @@ class ProjectCandidate(Base):
         nullable=False,
     )
     evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trigger_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    llm_raw_output: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     project: Mapped["Project"] = relationship(back_populates="project_candidates")  # noqa: F821

@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client'
-import type { ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse } from '@/types'
+import type { ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse, CandidateEvaluationResponse } from '@/types'
 
 export async function triggerEvaluation(
   projectId: string,
@@ -24,6 +24,13 @@ export async function listProjectCandidates(
   const { data } = await apiClient.get(`/projects/${projectId}/candidates`, {
     params: { sort_by_score: sortByScore },
   })
+  return data
+}
+
+export async function listCandidateEvaluations(
+  candidateId: string
+): Promise<CandidateEvaluationResponse[]> {
+  const { data } = await apiClient.get(`/candidates/${candidateId}/evaluations`)
   return data
 }
 

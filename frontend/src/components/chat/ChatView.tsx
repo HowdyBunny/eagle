@@ -11,7 +11,7 @@ import ProjectIntroBubble from './ProjectIntroBubble'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 
 export default function ChatView() {
-  const { currentProjectId, currentProject, authApiKey, selectProject, llmApiKey, embeddingApiKey } = useAppStore()
+  const { currentProjectId, currentProject, selectProject, llmApiKey, embeddingApiKey } = useAppStore()
   const { openOnboarding } = useUIStore()
   const settingsOk = Boolean(llmApiKey && embeddingApiKey)
   const { messages, sending, streamingContent, streamingStatus, error: storeError, _sendingProjectId, loadHistory, sendMessage } = useChatStore()
@@ -107,7 +107,6 @@ export default function ChatView() {
 
     const cleanup = bootstrapProject(
       message,
-      authApiKey,
       'precise',
       (event) => {
         handleBootstrapEvent(event)

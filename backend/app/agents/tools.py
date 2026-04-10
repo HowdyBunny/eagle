@@ -190,6 +190,15 @@ class ToolExecutor:
         self.current_project_id = current_project_id
         self.search_svc = SearchService()
 
+    def _resolve_project_id(self, project_id: str | None) -> uuid.UUID | None:
+        """Parse project_id from LLM, fall back to current_project_id on bad input."""
+        if project_id:
+            try:
+                return uuid.UUID(str(project_id))
+            except (ValueError, AttributeError):
+                pass
+        return self.current_project_id
+
     async def execute(self, tool_name: str, arguments: dict) -> Any:
         handler = getattr(self, f"_handle_{tool_name}", None)
         if not handler:
@@ -200,8 +209,12 @@ class ToolExecutor:
         if not requirement_profile:
             return {"error": "requirement_profile is required"}
 
+        resolved_id = self._resolve_project_id(project_id)
+        if resolved_id is None:
+            return {"error": "project_id is required"}
+
         data = ProjectUpdate(requirement_profile=requirement_profile)
-        project = await project_service.update_project(self.db, uuid.UUID(project_id), data)
+        project = await project_service.update_project(self.db, resolved_id, data)
         if not project:
             return {"error": f"Project {project_id} not found"}
 
@@ -212,7 +225,7 @@ class ToolExecutor:
             EmbeddingService().embed_requirement(project.id, str(requirement_profile))
         )
 
-        return {"project_id": project_id, "status": "requirement_updated"}
+        return {"project_id": str(resolved_id), "status": "requirement_updated"}
 
     async def _handle_search_talent_pool(
         self,
@@ -250,12 +263,19 @@ class ToolExecutor:
         }
 
     async def _handle_trigger_evaluation(self, project_id: str, candidate_id: str) -> dict:
+        resolved_id = self._resolve_project_id(project_id)
+        if resolved_id is None:
+            return {"error": "project_id is required"}
+        try:
+            cid = uuid.UUID(str(candidate_id))
+        except (ValueError, AttributeError):
+            return {"error": f"Invalid candidate_id: {candidate_id}"}
         from app.agents.evaluator import EvaluatorAgent
         agent = EvaluatorAgent(self.db)
-        pc = await agent.evaluate(uuid.UUID(project_id), uuid.UUID(candidate_id))
+        pc = await agent.evaluate(resolved_id, cid, trigger_source="ca")
         return {
-            "project_id": project_id,
-            "candidate_id": candidate_id,
+            "project_id": str(resolved_id),
+            "candidate_id": str(cid),
             "match_score": pc.match_score,
             "status": "evaluation_complete",
         }
@@ -263,11 +283,14 @@ class ToolExecutor:
     async def _handle_request_industry_research(
         self, project_id: str, topic: str, additional_context: str | None = None
     ) -> dict:
+        resolved_id = self._resolve_project_id(project_id)
+        if resolved_id is None:
+            return {"error": "project_id is required"}
         from app.agents.research import ResearchAgent
         agent = ResearchAgent(self.db)
-        research = await agent.research(uuid.UUID(project_id), topic, additional_context)
+        research = await agent.research(resolved_id, topic, additional_context)
         return {
-            "project_id": project_id,
+            "project_id": str(resolved_id),
             "topic": topic,
             "research_id": str(research.id),
             "status": "research_complete",
@@ -281,13 +304,16 @@ class ToolExecutor:
         candidate_id: str | None = None,
         weight_adjustment: dict | None = None,
     ) -> dict:
+        resolved_id = self._resolve_project_id(project_id)
+        if resolved_id is None:
+            return {"error": "project_id is required"}
         data = PreferenceCreate(
-            candidate_id=uuid.UUID(candidate_id) if candidate_id else None,
+            candidate_id=uuid.UUID(str(candidate_id)) if candidate_id else None,
             feedback_type=feedback_type,
             hunter_comment=hunter_comment,
             weight_adjustment=weight_adjustment,
         )
-        log = await preference_service.create_preference(self.db, uuid.UUID(project_id), data)
+        log = await preference_service.create_preference(self.db, resolved_id, data)
         return {"preference_id": str(log.id), "status": "preference_recorded"}
 
     async def _handle_update_project(

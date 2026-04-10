@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, ArrowRight, Trash2, AlertTriangle } from 'lucide-react'
-import { useAppStore } from '@/stores/app-store'
 import { useProjectStore } from '@/stores/project-store'
+import { useAppStore } from '@/stores/app-store'
 import StatusBadge from '@/components/shared/StatusBadge'
 import type { ProjectResponse } from '@/types'
 
@@ -19,7 +19,15 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const handleSelect = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate to detail if clicking on interactive elements
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+    navigate(`/projects/${project.id}`)
+  }
+
+  const handleSelect = (e: React.MouseEvent) => {
+    e.stopPropagation()
     selectProject(project)
     navigate('/')
   }
@@ -42,7 +50,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   })
 
   return (
-    <div className="relative bg-surface-container-lowest rounded-xl border border-outline-variant/10 shadow-sm hover:shadow-xl transition-all overflow-hidden group">
+    <div onClick={handleCardClick} className="relative bg-surface-container-lowest rounded-xl border border-outline-variant/10 shadow-sm hover:shadow-xl transition-all overflow-hidden group cursor-pointer">
       {/* Left accent bar */}
       {project.status === 'active' && (
         <div className="absolute left-0 top-0 w-1 h-full bg-primary rounded-l-xl" />

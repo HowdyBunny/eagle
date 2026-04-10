@@ -13,41 +13,75 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
 """
 
 import json
-import os
+import time
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
 from app.config import settings
 from app.utils.logger import logger
 
-# ── Langfuse v4 (optional) ─────────────────────────────────────────────────────
-# IMPORTANT: env vars must be set BEFORE importing langfuse, because it reads
-# them at module load time when initializing the singleton client.
-if settings.LANGFUSE_SECRET_KEY:
-    os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
-if settings.LANGFUSE_PUBLIC_KEY:
-    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
-if settings.LANGFUSE_HOST:
-    os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
+# ── LLM trace helpers ──────────────────────────────────────────────────────────
+# Every LLM call writes one JSON line to logs/llm_trace.jsonl via the dedicated
+# loguru sink (filtered by extra["llm_trace"]).  Read with:
+#   tail -f logs/llm_trace.jsonl | python -m json.tool
+#   cat logs/llm_trace.jsonl | jq 'select(.method=="agentic_loop_stream")'
 
-try:
-    from langfuse import observe as _lf_observe, get_client as _lf_get_client
-    _LANGFUSE_ENABLED = bool(settings.LANGFUSE_SECRET_KEY)
-    if _LANGFUSE_ENABLED:
-        logger.info("Langfuse observability enabled")
-except ImportError:
-    _LANGFUSE_ENABLED = False
+_trace_log = logger.bind(llm_trace=True)
 
-    def _lf_observe(*args, **kwargs):  # type: ignore
-        def decorator(fn):
-            return fn
-        return decorator
 
-    def _lf_get_client():  # type: ignore
-        class _Noop:
-            def update_current_generation(self, **kw): pass
-            def update_current_span(self, **kw): pass
-            def set_current_trace_io(self, *a, **kw): pass
-        return _Noop()
+def _fmt_messages(messages: list[dict]) -> list[dict]:
+    """Return a copy of messages with long content truncated for readability."""
+    out = []
+    for i, m in enumerate(messages):
+        role = m.get("role", "?")
+        content = m.get("content") or ""
+        if isinstance(content, list):
+            # Anthropic-style content blocks — stringify for the trace
+            content = json.dumps(content, ensure_ascii=False)
+        content = str(content)
+        # System prompt is usually long; give last user message the most room
+        if role == "system":
+            limit = 400
+        elif i == len(messages) - 1 and role == "user":
+            limit = 2000
+        else:
+            limit = 800
+        if len(content) > limit:
+            content = content[:limit] + f" …(+{len(content) - limit} chars)"
+        entry: dict = {"role": role, "content": content}
+        # Preserve tool_calls summary for agentic context
+        if m.get("tool_calls"):
+            entry["tool_calls"] = [
+                tc.get("function", {}).get("name") for tc in m["tool_calls"]
+            ]
+        out.append(entry)
+    return out
+
+
+def _write_trace(
+    method: str,
+    messages: list[dict],
+    output: str,
+    duration_ms: int,
+    available_tools: list[str] | None = None,
+    actions: list[str] | None = None,
+    error: str | None = None,
+) -> None:
+    record: dict = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        "method": method,
+        "provider": settings.LLM_PROVIDER,
+        "model": settings.LLM_MODEL,
+        "available_tools": available_tools,
+        "messages": _fmt_messages(messages),
+        "output": output[:2000] + f" …(+{len(output)-2000} chars)" if len(output) > 2000 else output,
+        "duration_ms": duration_ms,
+    }
+    if actions is not None:
+        record["actions"] = actions
+    if error is not None:
+        record["error"] = error
+    _trace_log.debug(json.dumps(record, ensure_ascii=False))
 
 
 # Human-readable labels shown in the frontend spinner when CA calls a tool
@@ -115,7 +149,6 @@ class LLMClient:
 
     # ── Public interface ────────────────────────────────────────────────────
 
-    @_lf_observe(name="agentic_loop", as_type="agent")
     async def agentic_loop(
         self,
         messages: list[dict],
@@ -127,48 +160,82 @@ class LLMClient:
         Returns (reply_text, actions_taken, intent_json).
         tools must be in OpenAI function-calling format.
         """
-        if self.provider == "anthropic":
-            result = await self._agentic_loop_anthropic(messages, tools, tool_executor)
-        else:
-            result = await self._agentic_loop_openai(messages, tools, tool_executor)
-        reply_text, actions_taken, _ = result
-        _lf_get_client().update_current_span(
-            metadata={"actions": actions_taken, "provider": self.provider,
-                      "tools": [t.get("function", {}).get("name") for t in tools]},
-        )
-        return result
+        t0 = time.monotonic()
+        error: str | None = None
+        reply_text = ""
+        actions_taken: list[str] = []
+        tool_names = [t.get("function", {}).get("name") for t in tools]
+        try:
+            if self.provider == "anthropic":
+                result = await self._agentic_loop_anthropic(messages, tools, tool_executor)
+            else:
+                result = await self._agentic_loop_openai(messages, tools, tool_executor)
+            reply_text, actions_taken, _ = result
+            return result
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            _write_trace(
+                method="agentic_loop",
+                messages=messages,
+                output=reply_text,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                available_tools=tool_names,
+                actions=actions_taken,
+                error=error,
+            )
 
-    @_lf_observe(name="simple_chat", as_type="generation")
     async def simple_chat(self, messages: list[dict], max_tokens: int = 2048) -> str:
         """Single-turn text completion, no tools."""
-        if self.provider == "anthropic":
-            result = await self._simple_chat_anthropic(messages, max_tokens)
-        else:
-            result = await self._simple_chat_openai(messages, max_tokens)
-        _lf_get_client().update_current_generation(
-            model=settings.LLM_MODEL,
-            metadata={"provider": self.provider},
-        )
-        return result
+        t0 = time.monotonic()
+        error: str | None = None
+        result = ""
+        try:
+            if self.provider == "anthropic":
+                result = await self._simple_chat_anthropic(messages, max_tokens)
+            else:
+                result = await self._simple_chat_openai(messages, max_tokens)
+            return result
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            _write_trace(
+                method="simple_chat",
+                messages=messages,
+                output=result,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                error=error,
+            )
 
-    @_lf_observe(name="research_chat", as_type="generation")
     async def research_chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
         """
         Text completion with web search enabled.
         OpenAI: uses Responses API (responses.create) with web_search tool.
         Anthropic: uses Messages API with built-in web_search_20250305 tool.
         """
-        if self.provider == "anthropic":
-            result = await self._research_chat_anthropic(messages, max_tokens)
-        else:
-            result = await self._research_chat_openai(messages, max_tokens)
-        _lf_get_client().update_current_generation(
-            model=settings.LLM_MODEL,
-            metadata={"provider": self.provider},
-        )
-        return result
+        t0 = time.monotonic()
+        error: str | None = None
+        result = ""
+        try:
+            if self.provider == "anthropic":
+                result = await self._research_chat_anthropic(messages, max_tokens)
+            else:
+                result = await self._research_chat_openai(messages, max_tokens)
+            return result
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            _write_trace(
+                method="research_chat",
+                messages=messages,
+                output=result,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                error=error,
+            )
 
-    @_lf_observe(name="agentic_loop_stream", as_type="agent")
     async def agentic_loop_stream(
         self,
         messages: list[dict],
@@ -196,16 +263,44 @@ class LLMClient:
             gen = self._agentic_loop_stream_anthropic(messages, tools, tool_executor)
         else:
             gen = self._agentic_loop_stream_openai(messages, tools, tool_executor)
-        async for event in gen:
-            if event.get("type") == "done":
-                _lf_get_client().update_current_span(
-                    metadata={
-                        "actions": event.get("actions_taken", []),
-                        "provider": self.provider,
-                        "model": settings.LLM_MODEL,
-                    },
-                )
-            yield event
+
+        t0 = time.monotonic()
+        error: str | None = None
+        tool_names = [t.get("function", {}).get("name") for t in tools]
+        try:
+            async for event in gen:
+                if event.get("type") == "done":
+                    _write_trace(
+                        method="agentic_loop_stream",
+                        messages=messages,
+                        output=event.get("reply_text", ""),
+                        duration_ms=int((time.monotonic() - t0) * 1000),
+                        available_tools=tool_names,
+                        actions=event.get("actions_taken"),
+                        error=None,
+                    )
+                elif event.get("type") == "error":
+                    error = event.get("message", "unknown stream error")
+                    _write_trace(
+                        method="agentic_loop_stream",
+                        messages=messages,
+                        output="",
+                        duration_ms=int((time.monotonic() - t0) * 1000),
+                        available_tools=tool_names,
+                        error=error,
+                    )
+                yield event
+        except Exception as exc:
+            error = str(exc)
+            _write_trace(
+                method="agentic_loop_stream",
+                messages=messages,
+                output="",
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                available_tools=tool_names,
+                error=error,
+            )
+            raise
 
     # ── OpenAI implementations ──────────────────────────────────────────────
 
@@ -250,7 +345,10 @@ class LLMClient:
                     tool_args = json.loads(tc.function.arguments)
                     logger.info(f"CA tool call [{self.provider}]: {tool_name} args={list(tool_args.keys())}")
                     result = await tool_executor.execute(tool_name, tool_args)
-                    actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                    _args_preview = json.dumps(tool_args, ensure_ascii=False)
+                    if len(_args_preview) > 400:
+                        _args_preview = _args_preview[:400] + "…"
+                    actions_taken.append(f"{tool_name}: {_args_preview}")
                     if intent_json is None:
                         intent_json = {"action": tool_name, "params": tool_args}
                     msgs.append({
@@ -358,7 +456,10 @@ class LLMClient:
 
                     logger.info(f"CA stream tool call [{self.provider}]: {tool_name}")
                     result = await tool_executor.execute(tool_name, tool_args)
-                    actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                    _args_preview = json.dumps(tool_args, ensure_ascii=False)
+                    if len(_args_preview) > 400:
+                        _args_preview = _args_preview[:400] + "…"
+                    actions_taken.append(f"{tool_name}: {_args_preview}")
                     if intent_json is None:
                         intent_json = {"action": tool_name, "params": tool_args}
                     msgs.append({
@@ -410,7 +511,10 @@ class LLMClient:
                             yield {"type": "tool_call", "name": tool_name, "label": label}
                             logger.info(f"CA stream tool call (recovery) [{self.provider}]: {tool_name}")
                             result = await tool_executor.execute(tool_name, tool_args)
-                            actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                            _args_preview = json.dumps(tool_args, ensure_ascii=False)
+                    if len(_args_preview) > 400:
+                        _args_preview = _args_preview[:400] + "…"
+                    actions_taken.append(f"{tool_name}: {_args_preview}")
                             if intent_json is None:
                                 intent_json = {"action": tool_name, "params": tool_args}
                             msgs.append({
@@ -529,7 +633,10 @@ class LLMClient:
 
                     logger.info(f"CA stream tool call [{self.provider}]: {tool_name}")
                     result = await tool_executor.execute(tool_name, tool_args)
-                    actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                    _args_preview = json.dumps(tool_args, ensure_ascii=False)
+                    if len(_args_preview) > 400:
+                        _args_preview = _args_preview[:400] + "…"
+                    actions_taken.append(f"{tool_name}: {_args_preview}")
                     if intent_json is None:
                         intent_json = {"action": tool_name, "params": tool_args}
                     tool_results.append({
@@ -589,7 +696,10 @@ class LLMClient:
                         tool_args = block.input
                         logger.info(f"CA tool call [{self.provider}]: {tool_name} args={list(tool_args.keys())}")
                         result = await tool_executor.execute(tool_name, tool_args)
-                        actions_taken.append(f"{tool_name}: {list(tool_args.keys())}")
+                        _args_preview = json.dumps(tool_args, ensure_ascii=False)
+                    if len(_args_preview) > 400:
+                        _args_preview = _args_preview[:400] + "…"
+                    actions_taken.append(f"{tool_name}: {_args_preview}")
                         if intent_json is None:
                             intent_json = {"action": tool_name, "params": tool_args}
                         tool_results.append({

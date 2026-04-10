@@ -12,8 +12,6 @@ export interface SettingsState {
   llmModel: string
   llmBaseUrl: string
   webSearchContextSize: WebSearchContextSize
-  // Backend auth
-  authApiKey: string
   // Embedding config
   embeddingApiKey: string
   embeddingModel: string
@@ -41,7 +39,6 @@ export const useAppStore = create<AppState>()(
       llmModel: 'gpt-4o',
       llmBaseUrl: '',
       webSearchContextSize: 'low',
-      authApiKey: '',
       embeddingApiKey: '',
       embeddingModel: 'text-embedding-3-small',
       embeddingDimensions: 1536,

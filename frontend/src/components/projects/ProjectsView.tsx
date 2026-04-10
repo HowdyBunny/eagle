@@ -34,7 +34,7 @@ export default function ProjectsView() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="font-headline font-black text-2xl tracking-tight text-on-surface">招聘项目</h2>
-          <p className="text-sm text-secondary mt-0.5">管理所有猎头任务和客户需求</p>
+          <p className="text-sm text-secondary mt-0.5">管理所有猎头任务和客户需求 · <span className="text-secondary/60">点击项目卡片可以查看项目详细信息</span></p>
         </div>
         <button
           onClick={handleNewProject}

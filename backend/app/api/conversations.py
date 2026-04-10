@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_api_key
 from app.database import get_db
 from app.schemas.conversation import ChatRequest, ChatResponse, ConversationLogResponse
 from app.services import project_service, conversation_service
@@ -18,7 +17,7 @@ async def chat(
     project_id: uuid.UUID,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -34,7 +33,7 @@ async def chat_stream(
     project_id: uuid.UUID,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     """
     SSE streaming version of /chat.
@@ -76,7 +75,7 @@ async def list_conversations(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+
 ):
     project = await project_service.get_project(db, project_id)
     if not project:

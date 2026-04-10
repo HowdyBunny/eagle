@@ -1,6 +1,6 @@
 export type { ProjectMode, ProjectStatus, ProjectCreate, ProjectUpdate, ProjectResponse } from './project'
 export type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult } from './candidate'
-export type { ProjectCandidateStatus, ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse } from './evaluation'
+export type { ProjectCandidateStatus, ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse, CandidateEvaluationResponse } from './evaluation'
 export type { ConversationRole, ChatRequest, ChatResponse, ConversationLogResponse } from './conversation'
 export type { OntologyResponse } from './ontology'
 export type { ResearchTriggerRequest, ResearchResponse } from './research'

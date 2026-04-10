@@ -20,7 +20,24 @@ class ProjectCandidateResponse(BaseModel):
     hunter_feedback: str | None
     status: ProjectCandidateStatus
     evaluated_at: datetime | None
+    trigger_source: str | None = None
+    llm_raw_output: str | None = None
     candidate: CandidateResponse | None = None
+
+
+class CandidateEvaluationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    project_name: str
+    client_name: str
+    match_score: float | None
+    recommendation: str | None
+    risk_flags: str | None
+    trigger_source: str | None
+    status: ProjectCandidateStatus
+    evaluated_at: datetime | None
 
 
 class ProjectCandidateUpdate(BaseModel):

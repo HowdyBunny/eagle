@@ -25,7 +25,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tools import CA_TOOLS, ToolExecutor
-from app.config import settings
 from app.database import async_session_maker
 from app.models.conversation_log import ConversationRole
 from app.schemas.project import ProjectCreate, ProjectResponse
@@ -90,20 +89,13 @@ async def bootstrap_project(ws: WebSocket):
         raw = await ws.receive_json()
         message: str = raw.get("message", "")
         mode: str = raw.get("mode", "precise")
-        api_key: str = raw.get("api_key", "") or ws.headers.get("x-api-key", "")
 
         if not message.strip():
             await ws.send_json({"type": "error", "message": "消息不能为空"})
             await ws.close()
             return
 
-        # 2. Auth
-        if api_key != settings.API_KEY:
-            await ws.send_json({"type": "error", "message": "认证失败，请检查 API Key"})
-            await ws.close()
-            return
-
-        # 3. Create stub project
+        # 2. Create stub project
         await ws.send_json({"type": "status", "message": "正在创建项目…"})
 
         async with async_session_maker() as db:

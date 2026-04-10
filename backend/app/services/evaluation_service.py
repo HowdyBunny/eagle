@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.project_candidate import ProjectCandidate, ProjectCandidateStatus
 from app.schemas.evaluation import ProjectCandidateUpdate
@@ -35,6 +35,8 @@ async def save_evaluation(
     dimension_scores: dict,
     recommendation: str,
     risk_flags: str,
+    trigger_source: str | None = None,
+    llm_raw_output: str | None = None,
 ) -> ProjectCandidate:
     pc = await get_or_create_project_candidate(db, project_id, candidate_id)
     pc.match_score = match_score
@@ -43,6 +45,8 @@ async def save_evaluation(
     pc.risk_flags = risk_flags
     pc.status = ProjectCandidateStatus.RECOMMENDED if match_score >= 70 else ProjectCandidateStatus.PENDING
     pc.evaluated_at = datetime.now(tz=timezone.utc)
+    pc.trigger_source = trigger_source
+    pc.llm_raw_output = llm_raw_output
     await db.commit()
     await db.refresh(pc)
     return pc
@@ -58,6 +62,23 @@ async def list_project_candidates(
     )
     if sort_by_score:
         query = query.order_by(ProjectCandidate.match_score.desc().nulls_last())
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def list_candidate_evaluations(
+    db: AsyncSession, candidate_id: uuid.UUID
+) -> list[ProjectCandidate]:
+    """Return all completed evaluations for a candidate, across all projects, newest first."""
+    query = (
+        select(ProjectCandidate)
+        .where(
+            ProjectCandidate.candidate_id == candidate_id,
+            ProjectCandidate.evaluated_at.is_not(None),
+        )
+        .options(joinedload(ProjectCandidate.project))
+        .order_by(ProjectCandidate.evaluated_at.desc())
+    )
     result = await db.execute(query)
     return list(result.scalars().all())
 

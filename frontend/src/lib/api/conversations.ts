@@ -28,28 +28,15 @@ export type StreamEvent =
 /**
  * Calls POST /projects/{id}/chat/stream and yields parsed SSE events.
  * Uses native fetch so that ReadableStream is available (axios doesn't support it).
- * Reads X-API-Key from the same localStorage key as the axios interceptor.
  */
 export async function* sendChatStream(
   projectId: string,
   message: string,
 ): AsyncGenerator<StreamEvent> {
-  // Read auth key from localStorage (same source as axios interceptor)
-  let apiKey = ''
-  try {
-    const raw = localStorage.getItem('eagle-app-store')
-    if (raw) {
-      const parsed = JSON.parse(raw) as { state?: Record<string, unknown> }
-      const key = parsed?.state?.['authApiKey']
-      if (typeof key === 'string') apiKey = key
-    }
-  } catch { /* ignore */ }
-
   const response = await fetch(`/api/projects/${projectId}/chat/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(apiKey ? { 'X-API-Key': apiKey } : {}),
     },
     body: JSON.stringify({ message }),
   })

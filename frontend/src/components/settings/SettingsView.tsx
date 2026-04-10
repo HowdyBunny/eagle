@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { Eye, EyeOff, Key, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen } from 'lucide-react'
+import { Eye, EyeOff, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore, type SettingsState } from '@/stores/app-store'
-import { checkHealth } from '@/lib/api/health'
 import { updateRuntimeSettings } from '@/lib/api/settings'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -155,7 +154,6 @@ export default function SettingsView() {
     llmBaseUrl: settings.llmBaseUrl,
     webSearchContextSize: settings.webSearchContextSize,
   })
-  const [auth, setAuth] = useState({ authApiKey: settings.authApiKey })
   const [emb, setEmb] = useState({
     embeddingApiKey: settings.embeddingApiKey,
     embeddingModel: settings.embeddingModel,
@@ -166,7 +164,7 @@ export default function SettingsView() {
 
   const [saving, setSaving] = useState<string | null>(null)
   const [status, setStatus] = useState<Record<string, 'idle' | 'ok' | 'error'>>({
-    llm: 'idle', auth: 'idle', emb: 'idle', sys: 'idle',
+    llm: 'idle', emb: 'idle', sys: 'idle',
   })
 
   const flashStatus = (key: string, s: 'ok' | 'error') => {
@@ -191,30 +189,6 @@ export default function SettingsView() {
     <TooltipProvider delay={150}>
       <div className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
-
-          {/* Backend Auth */}
-          <SettingsCard
-            icon={<Key size={16} className="text-primary" />}
-            title="后端 Authentication"
-            subtitle="前端与本地 FastAPI 通信密钥"
-            tooltip={
-              <div className="space-y-1.5">
-                <p><strong>Authentication API Key</strong>：前端每次请求在 <code>X-API-Key</code> header 里携带，后端 <code>API_KEY</code> 环境变量必须与之一致。</p>
-                <p className="text-secondary">这只是本地认证，不上传任何第三方。</p>
-              </div>
-            }
-            saving={saving === 'auth'}
-            status={status.auth}
-            onSave={() =>
-              saveSection('auth', auth, async () => {
-                await checkHealth()
-              })
-            }
-          >
-            <Field label="Authentication API Key" hint="点击保存会尝试 GET /health 验证连通性">
-              <SecretInput value={auth.authApiKey} onChange={(v) => setAuth({ authApiKey: v })} placeholder="your-secret-api-key-here" />
-            </Field>
-          </SettingsCard>
 
           {/* LLM Section */}
           <SettingsCard

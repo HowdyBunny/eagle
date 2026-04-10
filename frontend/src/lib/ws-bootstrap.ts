@@ -50,7 +50,6 @@ export type BootstrapEventHandler = (event: BootstrapEvent) => void
  */
 export function bootstrapProject(
   message: string,
-  apiKey: string,
   mode: 'precise' | 'explore' = 'precise',
   onEvent: BootstrapEventHandler,
 ): () => void {
@@ -61,7 +60,7 @@ export function bootstrapProject(
   const ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {
-    ws.send(JSON.stringify({ message, mode, api_key: apiKey }))
+    ws.send(JSON.stringify({ message, mode }))
   }
 
   ws.onmessage = (e) => {
