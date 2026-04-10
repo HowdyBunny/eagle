@@ -512,9 +512,9 @@ class LLMClient:
                             logger.info(f"CA stream tool call (recovery) [{self.provider}]: {tool_name}")
                             result = await tool_executor.execute(tool_name, tool_args)
                             _args_preview = json.dumps(tool_args, ensure_ascii=False)
-                    if len(_args_preview) > 400:
-                        _args_preview = _args_preview[:400] + "…"
-                    actions_taken.append(f"{tool_name}: {_args_preview}")
+                            if len(_args_preview) > 400:
+                                _args_preview = _args_preview[:400] + "…"
+                            actions_taken.append(f"{tool_name}: {_args_preview}")
                             if intent_json is None:
                                 intent_json = {"action": tool_name, "params": tool_args}
                             msgs.append({
@@ -697,9 +697,9 @@ class LLMClient:
                         logger.info(f"CA tool call [{self.provider}]: {tool_name} args={list(tool_args.keys())}")
                         result = await tool_executor.execute(tool_name, tool_args)
                         _args_preview = json.dumps(tool_args, ensure_ascii=False)
-                    if len(_args_preview) > 400:
-                        _args_preview = _args_preview[:400] + "…"
-                    actions_taken.append(f"{tool_name}: {_args_preview}")
+                        if len(_args_preview) > 400:
+                            _args_preview = _args_preview[:400] + "…"
+                        actions_taken.append(f"{tool_name}: {_args_preview}")
                         if intent_json is None:
                             intent_json = {"action": tool_name, "params": tool_args}
                         tool_results.append({

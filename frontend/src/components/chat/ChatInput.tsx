@@ -4,6 +4,7 @@ import { Send, Zap } from 'lucide-react'
 interface ChatInputProps {
   onSend: (message: string) => void
   disabled?: boolean
+  disableQuickActions?: boolean
 }
 
 const QUICK_ACTIONS = [
@@ -11,7 +12,7 @@ const QUICK_ACTIONS = [
   { label: '生成行业报告', message: '请触发 Research Agent 对当前项目所在行业进行调研' },
 ]
 
-export default function ChatInput({ onSend, disabled }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled, disableQuickActions }: ChatInputProps) {
   const [text, setText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -44,7 +45,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
           <button
             key={label}
             onClick={() => onSend(message)}
-            disabled={disabled}
+            disabled={disabled || disableQuickActions}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-[11px] font-bold text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-40"
           >
             <Zap size={11} />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, ArrowRight, Trash2, AlertTriangle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import { useAppStore } from '@/stores/app-store'
+import { useChatStore } from '@/stores/chat-store'
 import StatusBadge from '@/components/shared/StatusBadge'
 import type { ProjectResponse } from '@/types'
 
@@ -15,6 +16,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const clearProject = useAppStore((s) => s.clearProject)
   const currentProjectId = useAppStore((s) => s.currentProjectId)
   const deleteProject = useProjectStore((s) => s.deleteProject)
+  const clearMessages = useChatStore((s) => s.clearMessages)
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -38,6 +40,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
       await deleteProject(project.id)
       if (currentProjectId === project.id) {
         clearProject()
+        clearMessages()
       }
     } finally {
       setDeleting(false)

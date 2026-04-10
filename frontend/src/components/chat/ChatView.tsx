@@ -227,7 +227,7 @@ export default function ChatView() {
         </div>
       )}
 
-      <ChatInput onSend={handleSend} disabled={isSendingHere || bootstrapping} />
+      <ChatInput onSend={handleSend} disabled={isSendingHere || bootstrapping} disableQuickActions={!currentProjectId || messages.length === 0} />
     </div>
   )
 }
