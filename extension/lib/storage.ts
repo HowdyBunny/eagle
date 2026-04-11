@@ -2,7 +2,7 @@
 
 export async function getApiUrl(): Promise<string> {
   const result = await chrome.storage.local.get('apiUrl');
-  return result.apiUrl ?? 'http://localhost:8000';
+  return result.apiUrl ?? 'http://localhost:52777';
 }
 
 export async function setApiUrl(url: string): Promise<void> {
@@ -12,6 +12,6 @@ export async function setApiUrl(url: string): Promise<void> {
 export async function getSettings(): Promise<{ apiUrl: string }> {
   const result = await chrome.storage.local.get('apiUrl');
   return {
-    apiUrl: result.apiUrl ?? 'http://localhost:8000',
+    apiUrl: result.apiUrl ?? 'http://localhost:52777',
   };
 }

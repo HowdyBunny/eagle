@@ -43,7 +43,7 @@ export const useAppStore = create<AppState>()(
       embeddingModel: 'text-embedding-3-small',
       embeddingDimensions: 1536,
       embeddingBaseUrl: '',
-      backendPort: 8000,
+      backendPort: 52777,
       currentProjectId: null,
       currentProject: null,
 

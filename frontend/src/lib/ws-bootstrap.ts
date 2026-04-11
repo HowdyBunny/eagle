@@ -53,9 +53,9 @@ export function bootstrapProject(
   mode: 'precise' | 'explore' = 'precise',
   onEvent: BootstrapEventHandler,
 ): () => void {
-  // Build WS URL relative to current page
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${proto}//${location.host}/api/projects/bootstrap`
+  // Always hit the backend directly on the fixed loopback port so this works
+  // in both dev and the packaged Tauri app (where location.host is tauri://localhost).
+  const wsUrl = 'ws://127.0.0.1:52777/api/projects/bootstrap'
 
   const ws = new WebSocket(wsUrl)
 

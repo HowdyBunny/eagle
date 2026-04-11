@@ -306,11 +306,11 @@ export default function SettingsView() {
             saving={saving === 'sys'}
             status={status.sys}
             onSave={() => {
-              setBackendPort(Number(sys.backendPort) || 8000)
+              setBackendPort(Number(sys.backendPort) || 52777)
               flashStatus('sys', 'ok')
             }}
           >
-            <Field label="后端端口" hint="默认 8000，修改后需重启后端服务">
+            <Field label="后端端口" hint="默认 52777，修改后需重启后端服务">
               <input
                 type="number"
                 value={sys.backendPort}

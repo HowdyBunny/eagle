@@ -4,3 +4,12 @@ other/question.md
 other/linkedin_sample.html
 test/
 
+# PyInstaller
+backend/build/
+backend/dist/
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+frontend/src-tauri/gen/schemas/
+

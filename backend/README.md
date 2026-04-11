@@ -103,12 +103,12 @@ uv run python main.py
 **生产模式：**
 
 ```bash
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn app.main:app --host 0.0.0.0 --port 52777 --workers 4
 ```
 
 服务启动后访问：
-- API 文档：http://localhost:8000/docs
-- 健康检查：http://localhost:8000/api/health
+- API 文档：http://localhost:52777/docs
+- 健康检查：http://localhost:52777/api/health
 
 ## 文件存储结构
 

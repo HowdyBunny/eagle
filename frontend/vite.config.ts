@@ -11,13 +11,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        ws: true,
-      },
-    },
-  },
+  // The frontend now calls the backend directly at http://127.0.0.1:52777
+  // (CORS is wide-open), so no vite proxy is needed. Kept `server` empty
+  // as a placeholder if we ever need to reintroduce it.
 })

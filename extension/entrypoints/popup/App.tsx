@@ -5,7 +5,7 @@ import { getApiUrl, setApiUrl } from '../../lib/storage';
 type ConnectionStatus = 'unknown' | 'testing' | 'ok' | 'error';
 
 export default function App() {
-  const [apiUrl, setApiUrlState] = useState('http://localhost:8000');
+  const [apiUrl, setApiUrlState] = useState('http://localhost:52777');
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('unknown');
   const [connError, setConnError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -58,11 +58,11 @@ export default function App() {
             type="url"
             value={apiUrl}
             onChange={(e) => setApiUrlState(e.target.value)}
-            placeholder="http://localhost:8000"
+            placeholder="http://localhost:52777"
             className="w-full rounded-lg border border-eagle-border px-3 py-2 text-sm text-eagle-ink placeholder-eagle-ink/30
               focus:border-eagle-gold focus:outline-none focus:ring-1 focus:ring-eagle-gold"
           />
-          <p className="text-xs text-eagle-ink/40">Eagle 后端服务地址，默认 localhost:8000</p>
+          <p className="text-xs text-eagle-ink/40">Eagle 后端服务地址，默认 localhost:52777</p>
         </div>
 
         {/* Connection test */}

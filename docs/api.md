@@ -2,9 +2,9 @@
 
 ## 基本信息
 
-- **Base URL**: `http://localhost:8000`
+- **Base URL**: `http://localhost:52777`
 - **API 前缀**: `/api`
-- **文档 UI**: http://localhost:8000/docs (Swagger) | http://localhost:8000/redoc
+- **文档 UI**: http://localhost:52777/docs (Swagger) | http://localhost:52777/redoc
 
 ## 认证
 

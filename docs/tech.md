@@ -40,7 +40,7 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 │  ┌─ 前端 (React) ──────────────────────────────────┐  │
 │  │  招聘项目管理 │ 人才管理 │ 行业报告 │ 对话交互   │  │
 │  └──────────────────────┬──────────────────────────┘  │
-│                         │ HTTP → localhost:8000（可在后续修改端口，避免占用）  │
+│                         │ HTTP → localhost:52777（可在后续修改端口，避免占用）  │
 │  ┌──────────────────────▼──────────────────────────┐  │
 │  │  FastAPI 后端（PyInstaller 打包为 sidecar）      │  │
 │  │                                                  │  │
@@ -53,7 +53,7 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 │  └──────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────┘
          ↑
-   Chrome 插件 → POST localhost:8000/api/candidates
+   Chrome 插件 → POST localhost:52777/api/candidates
    （单一职责：抓取候选人页面信息并入库）
 ```
 
@@ -172,7 +172,7 @@ Embedding模型：openai 的 text-embedding-3-small（调动API）
 **Tauri Sidecar 工作流：**
 1. 用户启动
 2. Tauri 自动启动 PyInstaller 打包的 FastAPI 后端
-3. 后端监听 localhost:8000（可以在设置中调整，并重新加载）
+3. 后端监听 localhost:52777（可以在设置中调整，并重新加载）
 4. 前端 WebView 加载 React 应用
 5. 退出应用时自动关闭后端进程
 

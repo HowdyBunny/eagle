@@ -3,14 +3,22 @@ from pathlib import Path
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Resolve .env search paths. In packaged mode there is no project-local .env,
+# so we also look inside EAGLE_BASE_DIR (~/Desktop/Eagle/.env) which the user
+# can edit after install. Project-local .env wins during dev.
+_USER_ENV = Path("~/Desktop/Eagle/.env").expanduser()
+_ENV_FILES = (str(_USER_ENV), ".env")
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILES, env_file_encoding="utf-8", extra="ignore")
 
     # Core LLM — used by CA, RA, EA
     # LLM_PROVIDER: "openai" (default) uses OpenAI SDK; "anthropic" uses Anthropic SDK
     LLM_PROVIDER: str = "openai"
-    LLM_API_KEY: str
+    # Optional at startup so the packaged app can boot without credentials;
+    # the frontend prompts the user to fill these in on first run.
+    LLM_API_KEY: str | None = None
     LLM_MODEL: str = "gpt-4o"
     # openai:    LLM_BASE_URL must include /v1  (e.g. https://your-provider.com/v1)
     # anthropic: LLM_BASE_URL must NOT include /v1 (Anthropic SDK appends it automatically)
@@ -20,7 +28,7 @@ class Settings(BaseSettings):
     WEB_SEARCH_CONTEXT_SIZE: str = "low"  # "low" | "medium" | "high"
 
     # Embedding — any OpenAI-compatible embedding endpoint
-    EMBEDDING_API_KEY: str
+    EMBEDDING_API_KEY: str | None = None
     EMBEDDING_BASE_URL: str | None = None  # None = OpenAI official; must include /v1 for compatible endpoints
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSIONS: int = 1536

@@ -1,3 +1,5 @@
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,12 +11,32 @@ from app.config import settings
 from app.database import engine
 
 
+def _resource_path(relative: str) -> Path:
+    """Resolve a bundled resource — works in dev and inside a PyInstaller bundle."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    return base / relative
+
+
+def _run_alembic_upgrade() -> None:
+    """Run `alembic upgrade head` against the current DATABASE_URL. Sync — call via asyncio.to_thread."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(_resource_path("alembic.ini")))
+    cfg.set_main_option("script_location", str(_resource_path("alembic")))
+    command.upgrade(cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: ensure data directories exist
     db_path = Path(settings.DATABASE_URL.replace("sqlite+aiosqlite:///", ""))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
+
+    # Run pending Alembic migrations. Offloaded to a worker thread because
+    # env.py uses asyncio.run() which cannot run inside the active loop.
+    await asyncio.to_thread(_run_alembic_upgrade)
 
     # Verify DB connection
     async with engine.connect() as conn:
