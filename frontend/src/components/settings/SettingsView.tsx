@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore, type SettingsState } from '@/stores/app-store'
 import { updateRuntimeSettings } from '@/lib/api/settings'
 
@@ -12,6 +13,12 @@ const inputClass =
   'w-full bg-surface-container-low border-b-2 border-transparent focus:border-primary-container rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-secondary/50 outline-none transition-colors'
 
 const monoInputClass = `${inputClass} font-mono`
+
+// SelectTrigger needs a separate class — it has its own internal styles that
+// conflict with inputClass (e.g. border, bg, padding, width).  We only override
+// what's needed so tailwind-merge can resolve conflicts cleanly.
+const selectTriggerClass =
+  'w-full h-auto bg-surface-container-low border-0 border-b-2 border-transparent rounded-lg px-4 py-3 text-sm text-on-surface outline-none transition-colors'
 
 function Field({
   label,
@@ -219,14 +226,18 @@ export default function SettingsView() {
           >
             <div className="grid grid-cols-2 gap-4">
               <Field label="LLM Provider">
-                <select
+                <Select
                   value={llm.llmProvider}
-                  onChange={(e) => setLlm({ ...llm, llmProvider: e.target.value as 'openai' | 'anthropic' })}
-                  className={inputClass}
+                  onValueChange={(v) => setLlm({ ...llm, llmProvider: v as 'openai' | 'anthropic' })}
                 >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
+                  <SelectTrigger className={selectTriggerClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="LLM Model" hint="例如：gpt-5.2、claude-sonnet-4-6">
                 <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-5.2" className={monoInputClass} />
@@ -239,15 +250,19 @@ export default function SettingsView() {
               <input value={llm.llmBaseUrl} onChange={(e) => setLlm({ ...llm, llmBaseUrl: e.target.value })} placeholder="https://your-provider.example.com/v1" className={monoInputClass} />
             </Field>
             <Field label="Web Search Context Size">
-              <select
+              <Select
                 value={llm.webSearchContextSize}
-                onChange={(e) => setLlm({ ...llm, webSearchContextSize: e.target.value as 'low' | 'medium' | 'high' })}
-                className={inputClass}
+                onValueChange={(v) => setLlm({ ...llm, webSearchContextSize: v as 'low' | 'medium' | 'high' })}
               >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
           </SettingsCard>
 
@@ -332,7 +347,7 @@ export default function SettingsView() {
               </div>
             </div>
             <div className="px-6 py-5 space-y-3">
-              <Field label="数据库存储路径" hint="SQLite + ChromaDB 存储位置">
+              <Field label="数据库存储路径" hint="SQLite + LanceDB 存储位置">
                 <div className="bg-surface-container-low rounded-lg px-4 py-3 font-mono text-sm text-secondary">
                   ~/Desktop/Eagle/data/
                 </div>

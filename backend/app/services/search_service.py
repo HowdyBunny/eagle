@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateResponse, CandidateSearchRequest, CandidateSearchResult
-from app.services.chroma_service import get_candidate_collection
+from app.services.lancedb_service import get_candidate_table, vector_search
 from app.services.embedding_service import EmbeddingService
 
 
@@ -21,7 +21,7 @@ class SearchService:
         project_id: uuid.UUID | None = None,
     ) -> list[CandidateSearchResult]:
         """
-        Hybrid search: SQL filter (hard constraints) + ChromaDB semantic search run in parallel.
+        Hybrid search: SQL filter (hard constraints) + LanceDB semantic search run in parallel.
         Results are merged, deduplicated, and ranked.
         """
         sql_task = asyncio.create_task(self._sql_search(db, request))
@@ -80,19 +80,9 @@ class SearchService:
 
     async def _vector_search(self, query_text: str, limit: int = 40) -> dict[uuid.UUID, float]:
         query_embedding = await self.embedding_svc.get_embedding(query_text)
-        collection = get_candidate_collection()
-
-        # ChromaDB query returns cosine distance (lower = more similar), same as pgvector <=>
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=limit,
-        )
-
-        output: dict[uuid.UUID, float] = {}
-        if results["ids"] and results["ids"][0]:
-            for id_str, distance in zip(results["ids"][0], results["distances"][0]):
-                output[uuid.UUID(id_str)] = distance
-        return output
+        # LanceDB cosine distance (lower = more similar), same range as pgvector <=>
+        rows = vector_search(get_candidate_table(), query_embedding, limit=limit)
+        return {uuid.UUID(r["id"]): float(r["_distance"]) for r in rows}
 
 
 def _compute_combined_score(sql_matched: bool, vector_score: float | None) -> float:

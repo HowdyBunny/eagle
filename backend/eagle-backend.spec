@@ -2,9 +2,9 @@
 # Build with:   uv run pyinstaller eagle-backend.spec
 # Output:       backend/dist/eagle-backend/  (onedir — an exe + _internal/)
 #
-# Onedir is used instead of onefile because ChromaDB + SQLAlchemy have large
-# dynamic import graphs; onefile would extract ~200MB to a tmp dir on every
-# launch, which is both slow and fragile.
+# Onedir is used instead of onefile because pyarrow + SQLAlchemy have large
+# dynamic import graphs; onefile would extract everything to a tmp dir on
+# every launch, which is both slow and fragile.
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_data_files
 
@@ -13,15 +13,8 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_dat
 datas, binaries, hiddenimports = [], [], []
 
 for pkg in (
-    "chromadb",
-    "chromadb.telemetry",
-    "chroma_hnswlib",
-    "tokenizers",
-    "opentelemetry",
-    "posthog",
-    "tiktoken",
-    "tiktoken_ext",
-    "onnxruntime",
+    "lancedb",
+    "pyarrow",
     "sqlalchemy",
     "aiosqlite",
     "alembic",
@@ -38,6 +31,7 @@ for pkg in (
     "loguru",
     "tqdm",
     "send2trash",
+    "certifi",
 ):
     try:
         d, b, h = collect_all(pkg)
@@ -68,7 +62,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=["hook_ssl_certs.py"],
     excludes=[
         # Shrink the bundle — none of these are used by the backend.
         "tkinter",

@@ -14,8 +14,8 @@ export default defineConfig({
     host_permissions: [
       'https://www.linkedin.com/*',
       'https://www.liepin.com/*',
-      'http://localhost:8000/*',
-      'http://127.0.0.1:8000/*',
+      'http://localhost:52777/*',
+      'http://127.0.0.1:52777/*',
     ],
     web_accessible_resources: [
       {

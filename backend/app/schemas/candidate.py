@@ -70,7 +70,7 @@ class CandidateSearchResult(BaseModel):
 
     candidate: CandidateResponse
     sql_matched: bool = False
-    vector_score: float | None = None  # Cosine distance from ChromaDB (lower = more similar, range 0-2)
+    vector_score: float | None = None  # Cosine distance from LanceDB (lower = more similar, range 0-2)
     combined_score: float = 0.0        # Final ranking score 0-100 (higher = better match)
     # Score formula: sql_bonus(40) + vector_similarity(up to 60)
     # sql_bonus = 40 if hard filters matched, else 0

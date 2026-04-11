@@ -143,7 +143,7 @@ async def bootstrap_project(ws: WebSocket):
                 db, project.id, ConversationRole.HUNTER, message
             )
 
-            await ws.send_json({"type": "status", "message": "CA 正在思考…"})
+            await ws.send_json({"type": "status", "message": "CA 正在思考…需要花费时间去操作工具和检索回答，请耐心等待"})
 
             reply_text = ""
             actions_taken: list = []

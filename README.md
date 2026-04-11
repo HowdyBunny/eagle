@@ -13,7 +13,7 @@ uv run python main.py --dev     # 启动服务（开发）
 
 前端和extension：
 ```bash
-cd extension ## 或者 cd frontend
+cd extension # 或者 cd frontend
 pnpm install
 pnpm dev          # dev server at http://localhost:5173
 pnpm build        # prod bundle into dist/
@@ -33,7 +33,6 @@ uv run pyinstaller eagle-backend.spec --noconfirm
 
 # 2. 打整个 app（会自动复制 backend/dist 到 src-tauri/binaries 并打进 bundle）
 cd ../frontend
-export PATH="$HOME/.cargo/bin:$PATH"
 pnpm tauri build
 ```
 `pnpm tauri build` 在 macOS 上同时产出两样东西：

@@ -3,10 +3,11 @@ import uuid
 from openai import AsyncOpenAI
 
 from app.config import settings
-from app.services.chroma_service import (
-    get_candidate_collection,
-    get_industry_collection,
-    get_requirement_collection,
+from app.services.lancedb_service import (
+    get_candidate_table,
+    get_industry_table,
+    get_requirement_table,
+    upsert_row,
 )
 from app.utils.logger import logger
 
@@ -29,12 +30,14 @@ class EmbeddingService:
     async def embed_candidate(self, candidate_id: uuid.UUID, experience_summary: str) -> None:
         try:
             embedding = await self.get_embedding(experience_summary)
-            collection = get_candidate_collection()
-            collection.upsert(
-                ids=[str(candidate_id)],
-                embeddings=[embedding],
-                documents=[experience_summary],
-                metadatas=[{"candidate_id": str(candidate_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
+            upsert_row(
+                get_candidate_table(),
+                {
+                    "id": str(candidate_id),
+                    "vector": embedding,
+                    "document": experience_summary,
+                    "embedding_model_version": settings.EMBEDDING_MODEL,
+                },
             )
             logger.info(f"Embedded candidate {candidate_id}")
         except Exception as e:
@@ -43,12 +46,14 @@ class EmbeddingService:
     async def embed_requirement(self, project_id: uuid.UUID, requirement_text: str) -> None:
         try:
             embedding = await self.get_embedding(requirement_text)
-            collection = get_requirement_collection()
-            collection.upsert(
-                ids=[str(project_id)],
-                embeddings=[embedding],
-                documents=[requirement_text],
-                metadatas=[{"project_id": str(project_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
+            upsert_row(
+                get_requirement_table(),
+                {
+                    "id": str(project_id),
+                    "vector": embedding,
+                    "document": requirement_text,
+                    "embedding_model_version": settings.EMBEDDING_MODEL,
+                },
             )
             logger.info(f"Embedded requirement for project {project_id}")
         except Exception as e:
@@ -61,12 +66,16 @@ class EmbeddingService:
     ) -> dict:
         chunk_id = str(uuid.uuid4())
         embedding = await self.get_embedding(content_text)
-        collection = get_industry_collection()
-        collection.add(
-            ids=[chunk_id],
-            embeddings=[embedding],
-            documents=[content_text],
-            metadatas=[{"source_ontology_id": str(ontology_id), "embedding_model_version": settings.EMBEDDING_MODEL}],
+        get_industry_table().add(
+            [
+                {
+                    "id": chunk_id,
+                    "vector": embedding,
+                    "document": content_text,
+                    "source_ontology_id": str(ontology_id),
+                    "embedding_model_version": settings.EMBEDDING_MODEL,
+                }
+            ]
         )
         logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
         return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}

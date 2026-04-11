@@ -28,12 +28,16 @@ export type StreamEvent =
 /**
  * Calls POST /projects/{id}/chat/stream and yields parsed SSE events.
  * Uses native fetch so that ReadableStream is available (axios doesn't support it).
+ *
+ * NOTE: Must use an absolute URL — in the packaged Tauri app the webview origin
+ * is tauri://localhost, so relative paths would resolve to the static frontend
+ * bundle instead of the FastAPI backend.
  */
 export async function* sendChatStream(
   projectId: string,
   message: string,
 ): AsyncGenerator<StreamEvent> {
-  const response = await fetch(`/api/projects/${projectId}/chat/stream`, {
+  const response = await fetch(`http://127.0.0.1:52777/api/projects/${projectId}/chat/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

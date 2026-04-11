@@ -249,18 +249,14 @@ class EvaluatorAgent:
         if not project.requirement_profile:
             return ""
         try:
-            from app.services.chroma_service import get_industry_collection
+            from app.services.lancedb_service import get_industry_table, vector_search
             query_text = f"{project.jd_raw or ''} {str(project.requirement_profile)}"
             query_embedding = await self.embedding_svc.get_embedding(query_text[:2000])
 
-            collection = get_industry_collection()
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=3,
-            )
-            if not results["documents"] or not results["documents"][0]:
+            rows = vector_search(get_industry_table(), query_embedding, limit=3)
+            if not rows:
                 return ""
-            return "\n\n".join(results["documents"][0])
+            return "\n\n".join(r["document"] for r in rows)
         except Exception as e:
             logger.warning(f"Failed to get industry context: {e}")
             return ""

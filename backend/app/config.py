@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     # Database — derived from EAGLE_BASE_DIR if not explicitly set
     DATABASE_URL: str = ""
 
-    # ChromaDB persist directory — derived from EAGLE_BASE_DIR if not explicitly set
-    CHROMA_PERSIST_DIR: str = ""
+    # LanceDB persist directory — derived from EAGLE_BASE_DIR if not explicitly set
+    LANCEDB_PERSIST_DIR: str = ""
 
     @model_validator(mode="after")
     def _set_derived_paths(self) -> "Settings":
@@ -53,8 +53,8 @@ class Settings(BaseSettings):
         if not self.DATABASE_URL:
             db_path = base / "data" / "eagle.db"
             self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
-        if not self.CHROMA_PERSIST_DIR:
-            self.CHROMA_PERSIST_DIR = str(base / "data" / "chroma")
+        if not self.LANCEDB_PERSIST_DIR:
+            self.LANCEDB_PERSIST_DIR = str(base / "data" / "lancedb")
         return self
 
 

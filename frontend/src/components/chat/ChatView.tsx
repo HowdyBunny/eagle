@@ -190,7 +190,7 @@ export default function ChatView() {
               <p className="text-[11px] text-secondary mt-2">
                 {bootstrapping
                   ? (bootstrapStatus ?? '正在为你建立项目…')
-                  : (streamingStatus ?? 'CA 正在思考…')}
+                  : (streamingStatus ?? 'CA 正在思考…需要花费时间去操作工具和检索回答，请耐心等待')}
               </p>
             </div>
           </div>

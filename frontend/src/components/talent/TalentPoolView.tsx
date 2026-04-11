@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Users, Search, Filter, X, Trash2 } from 'lucide-react'
+import { Users, Search, Filter, X, Trash2, UserPlus } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
 import { useDebounce } from '@/hooks/use-debounce'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import StatusBadge from '@/components/shared/StatusBadge'
 import CandidateDetailSheet from './CandidateDetailSheet'
+import AddCandidateDialog from './AddCandidateDialog'
 import type { CandidateResponse } from '@/types'
 
 export default function TalentPoolView() {
@@ -17,13 +18,19 @@ export default function TalentPoolView() {
 
   const [query, setQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [showAddDialog, setShowAddDialog] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateResponse | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const debouncedQuery = useDebounce(query, 400)
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    if (!window.confirm('确认从人才库中删除此候选人？')) return
+    setPendingDeleteId(id)
+  }
+
+  const confirmDelete = async (id: string) => {
+    setPendingDeleteId(null)
     setDeletingId(id)
     try {
       await deleteCandidate(id)
@@ -61,6 +68,13 @@ export default function TalentPoolView() {
           <h2 className="font-headline font-black text-2xl tracking-tight text-on-surface">人才库</h2>
           <p className="text-sm text-secondary mt-0.5">所有候选人的全局人才池</p>
         </div>
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl kinetic-gradient text-white text-sm font-headline font-semibold hover:shadow-md transition-all scale-98-active"
+        >
+          <UserPlus size={15} />
+          手动添加候选人
+        </button>
       </div>
 
       {/* Stats */}
@@ -213,22 +227,40 @@ export default function TalentPoolView() {
                   </td>
                   {/* Actions */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => setSelectedCandidate(c)}
-                        className="text-[11px] font-bold text-primary hover:underline"
-                      >
-                        查看档案
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(e, c.id)}
-                        disabled={deletingId === c.id}
-                        className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors"
-                        title="删除"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    {pendingDeleteId === c.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-secondary">确认删除？</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); confirmDelete(c.id) }}
+                          className="text-[11px] font-bold text-red-500 hover:text-red-700 transition-colors"
+                        >
+                          确认
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPendingDeleteId(null) }}
+                          className="text-[11px] text-secondary hover:text-on-surface transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setSelectedCandidate(c)}
+                          className="text-[11px] font-bold text-primary hover:underline"
+                        >
+                          查看档案
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteClick(e, c.id)}
+                          disabled={deletingId === c.id}
+                          className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                          title="删除"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -266,6 +298,11 @@ export default function TalentPoolView() {
         candidate={selectedCandidate}
         open={selectedCandidate != null}
         onClose={() => setSelectedCandidate(null)}
+      />
+
+      <AddCandidateDialog
+        open={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
       />
     </div>
   )

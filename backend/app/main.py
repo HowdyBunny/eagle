@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     # Startup: ensure data directories exist
     db_path = Path(settings.DATABASE_URL.replace("sqlite+aiosqlite:///", ""))
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.LANCEDB_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
 
     # Run pending Alembic migrations. Offloaded to a worker thread because
     # env.py uses asyncio.run() which cannot run inside the active loop.
@@ -42,15 +42,15 @@ async def lifespan(app: FastAPI):
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Warm up ChromaDB (creates collections if they don't exist)
-    from app.services.chroma_service import (
-        get_candidate_collection,
-        get_industry_collection,
-        get_requirement_collection,
+    # Warm up LanceDB (creates tables if they don't exist)
+    from app.services.lancedb_service import (
+        get_candidate_table,
+        get_industry_table,
+        get_requirement_table,
     )
-    get_candidate_collection()
-    get_industry_collection()
-    get_requirement_collection()
+    get_candidate_table()
+    get_industry_table()
+    get_requirement_table()
 
     yield
 

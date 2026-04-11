@@ -1,13 +1,7 @@
 # 项目开发待办 (TODO)
 
 ## 功能问题
-目前电脑上的rust装在了cargo下，有问题的吗？是否路径没有添加好？帮我检查一下
-1. 持久化API Key：目前用户通过Put填的key只在当前backend进程有效，重启会丢失，可以保存到~/Desktop/Eagle/.env中。我关闭程序之后，还看到chroma的shm和wal文件还在，是否是没有完全关闭？
-2. 缩小体积 — 当前 bundle 含 onnxruntime 和 chromadb，可能 300MB+。如果不需要本地 embedding，可以换成纯 API 调用，跳过 onnxruntime(最好的方案：把 ChromaDB 换成lancedb，都是单一轻量库，能省 200MB+，但需要改代码)
-3. 打开客户端的大小问题需要变动（目前窗口比较小需要更大）。
-4. 系统配置的后端的默认端口没有改
-5. 打包后的那种下拉菜单（比如openai和anthropic、search的effect等），和原来的其他的样式不一样，我感觉是mac的原因，希望能够改成样式一致的
-6. 安装包打开后好像还有.ino文件
+7. 浏览器插件在某些环境下无法使用。如果未来猎头反馈无法使用，应用用什么chrome的console命令来查看页面的结构（experience、education模块等），然后发送给开发者进行迭代（包括当前开发者可能没有猎聘这些网站的账号，那么应该给猎头什么console命令去查看页面的结构呢？）？如果单纯是因为linkedin懒加载了，那么在显示unknown的时候，是否可以有一个按键可以重新加载信息？
 
 ## 核心架构 (状态管理重构)
 - **问题**：`bootstrapping` 等状态存储在 `ChatView` 本地，导致用户切换页面时组件卸载，丢失后台运行状态，产生空白 UI。bootstrapping、bootstrapStatus、setError 这些是 ChatView 的本地 React state，绑定在那个组件实例上。用户切页面 → 旧 ChatView unmount → 新页面 mount → 用户切回来 → 新的 ChatView 实例重新挂载，它的 bootstrapping 是 false，不知道后台还有个正在跑的 bootstrap。结果：用户回来看到空白聊天，没有 spinner，没有进度。

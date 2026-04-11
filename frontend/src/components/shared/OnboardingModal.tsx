@@ -15,6 +15,7 @@ import { X, Sparkles, Database, Eye, EyeOff, ChevronRight, Check, Copy } from 'l
 import { useAppStore, type LLMProvider } from '@/stores/app-store'
 import { useUIStore } from '@/stores/ui-store'
 import { updateRuntimeSettings } from '@/lib/api/settings'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // ── Reusable input primitives (same style as SettingsView) ────────────────────
 
@@ -22,6 +23,9 @@ const inputCls =
   'w-full bg-surface-container border-b-2 border-transparent focus:border-primary rounded-lg px-4 py-2.5 text-sm text-on-surface placeholder:text-secondary/50 outline-none transition-colors'
 
 const monoCls = `${inputCls} font-mono`
+
+const selectTriggerCls =
+  'w-full h-auto bg-surface-container border-0 border-b-2 border-transparent rounded-lg px-4 py-2.5 text-sm text-on-surface outline-none transition-colors'
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -230,14 +234,18 @@ export default function OnboardingModal() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Provider</Label>
-                  <select
+                  <Select
                     value={llm.llmProvider}
-                    onChange={(e) => setLlm({ ...llm, llmProvider: e.target.value as LLMProvider })}
-                    className={inputCls}
+                    onValueChange={(v) => setLlm({ ...llm, llmProvider: v as LLMProvider })}
                   >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
+                    <SelectTrigger className={selectTriggerCls}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>模型名称</Label>
