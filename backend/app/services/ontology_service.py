@@ -7,7 +7,9 @@ from app.models.skill_ontology import SkillOntology
 
 
 async def create_ontology(db: AsyncSession, data: dict) -> SkillOntology:
-    entry = SkillOntology(**data)
+    valid_columns = {c.key for c in SkillOntology.__table__.columns}
+    filtered = {k: v for k, v in data.items() if k in valid_columns}
+    entry = SkillOntology(**filtered)
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
