@@ -23,7 +23,7 @@
 
 ## 图标
 
-<img src="frontend/public/eagle.png" alt="Eagle" style="zoom:10%;" />
+<img src="frontend/public/eagle.png" alt="Eagle" width="64" />
 
 ## 应用内截图Screenshots
 
