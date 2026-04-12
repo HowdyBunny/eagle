@@ -19,3 +19,6 @@ frontend/src-tauri/target/
 frontend/src-tauri/binaries/
 frontend/src-tauri/gen/schemas/
 
+# Demo Design
+extension/design_from_ai_studio/
+frontend/design_from_ai_studio/

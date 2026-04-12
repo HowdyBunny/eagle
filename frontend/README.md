@@ -1,7 +1,7 @@
 # Eagle Frontend
 
 React + TypeScript + Vite frontend for the Eagle 猎头 AI Agent 桌面应用。它作为
-本地 FastAPI 后端（localhost:8000）的 UI 壳，最终会被打包进 Tauri 桌面应用。
+本地 FastAPI 后端（localhost:52777）的 UI 壳，最终会被打包进 Tauri 桌面应用。
 
 ---
 
@@ -13,7 +13,7 @@ pnpm dev          # dev server at http://localhost:5173
 pnpm build        # prod bundle into dist/
 ```
 
-Vite 已把 `/api` 代理到 `http://localhost:8000`，所以开发时只需单独启动后端。
+Vite 已把 `/api` 代理到 `http://localhost:52777`，所以开发时只需单独启动后端。
 
 ---
 
@@ -189,15 +189,14 @@ Ontology 结构（前端 `OntologyDoc` 渲染）：
 ## 前端需要的后端数据约定
 
 1. **所有 id 都是 UUID 字符串**，datetime 用 ISO-8601 字符串。
-2. **`X-API-Key` 校验**：后端 `app/auth.py` 读取 env `API_KEY`，和请求头比对。
-3. **后端 LLM/Embedding 配置目前来自 env**（`backend/.env`）。前端 Settings 的
+2. **后端 LLM/Embedding 配置目前来自 env**（`backend/.env`）。前端 Settings 的
    LLM / Embedding 字段只是**本地草稿** —— 如果要让用户在 UI 里改模型/base URL，
    后端需要新增 `PUT /settings` 接口来热更新运行时配置，或者前端把这些字段以
    header 形式下发，后端 agent 在构造 openai client 时读取覆盖。当前实现是
    「前端存了就算」，后端重启读最新 env。
-4. **CORS**：开发时 Vite proxy 规避；Tauri 打包后前端从 `tauri://` 起源访问
+3. **CORS**：开发时 Vite proxy 规避；Tauri 打包后前端从 `tauri://` 起源访问
    `localhost:8000`，后端需要 `allow_origins` 包含该源或 `*`。
-5. **错误格式**：axios 拦截器不处理错误，各 store 自己 catch。后端异常用
+4. **错误格式**：axios 拦截器不处理错误，各 store 自己 catch。后端异常用
    FastAPI 默认 `{ detail: string }` 即可。
 
 ---

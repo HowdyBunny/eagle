@@ -26,11 +26,11 @@ update_preference、change_project_context
 
 **`conversation_logs`** — CA对话层的完整记录。`role` 是"hunter"或"assistant"，`intent_json` 记录CA从每轮对话中解析出的结构化意图（比如`{action: "search_talent_pool", filters: {...}}`）。这张表既用于审计追溯，也用于CA在长对话中保持上下文。
 
-## 向量数据库（ChromaDB，本地文件存储）
+## 向量数据库（LanceDB，本地文件存储）
 
 存储路径：`~/Desktop/Eagle/data/chroma/`
 
-共 3 个 ChromaDB collection：
+共 3 个 LanceDB collection：
 
 **candidate_embeddings** — 每个候选人的工作经历 embedding，关联 candidate_id。EA 做软匹配时查询这个 collection。
 
