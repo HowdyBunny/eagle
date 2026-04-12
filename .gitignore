@@ -2,7 +2,13 @@
 other/need_to_solve.md
 other/question.md
 other/linkedin_sample.html
+other/debug_script.md
 test/
+
+# docs
+docs/PRD.md
+docs/pipeline.md
+docs/tech.md
 
 # PyInstaller
 backend/build/

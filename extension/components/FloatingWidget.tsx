@@ -199,7 +199,19 @@ export function FloatingWidget() {
       {/* Body */}
       <div className="p-3 space-y-3">
         {/* Candidate Preview */}
-        <CandidatePreview data={candidateData} error={parseError} />
+        <CandidatePreview
+          data={candidateData}
+          error={parseError}
+          onRetry={widgetState === 'idle' ? () => {
+            try {
+              const data = extractCandidateData();
+              setCandidateData(data);
+              setParseError(undefined);
+            } catch (e) {
+              setParseError(e instanceof Error ? e.message : '页面解析失败');
+            }
+          } : undefined}
+        />
 
         {/* Status */}
         {widgetState === 'error' && (

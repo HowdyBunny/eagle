@@ -8,7 +8,7 @@ update_preference、change_project_context
 
 表的ER图
 
-![ER](/Users/howdybunny/Desktop/MyApp/eagle/docs/ER.png)
+![ER](../other/ER.png)
 
 ## 七张 SQL 表的设计逻辑
 
