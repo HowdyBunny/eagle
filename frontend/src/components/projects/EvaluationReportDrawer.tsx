@@ -113,7 +113,7 @@ export default function EvaluationReportDrawer({ evaluation, open, onClose }: Ev
           {evaluation.risk_flags && (
             <section>
               <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-secondary mb-3">
-                <AlertTriangle size={12} /> 风险提示
+                <AlertTriangle size={12} /> 待猎头继续沟通的事项
               </h3>
               <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl px-4 py-3">
                 <p className="text-sm text-on-surface leading-relaxed whitespace-pre-line">{evaluation.risk_flags}</p>
