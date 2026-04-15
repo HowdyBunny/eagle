@@ -5,6 +5,8 @@ export interface RuntimeSettingsUpdate {
   llm_api_key?: string
   llm_model?: string
   llm_base_url?: string
+  web_search_strategy?: string
+  web_search_extra_body?: string
   web_search_context_size?: string
   embedding_api_key?: string
   embedding_model?: string

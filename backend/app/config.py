@@ -24,8 +24,20 @@ class Settings(BaseSettings):
     # anthropic: LLM_BASE_URL must NOT include /v1 (Anthropic SDK appends it automatically)
     LLM_BASE_URL: str | None = None
 
-    # Web search (used by RA when LLM_PROVIDER=openai via responses.create)
-    WEB_SEARCH_CONTEXT_SIZE: str = "low"  # "low" | "medium" | "high"
+    # Web search strategy for Research Agent (independent of LLM_PROVIDER / SDK):
+    #   "openai_responses"  → OpenAI Responses API + web_search tool (official OpenAI only)
+    #   "anthropic_builtin" → Anthropic messages API + web_search_20260209 built-in tool
+    #   "extra_body"        → chat.completions + extra_body JSON (e.g. Qwen enable_search)
+    #   "openai_tool"       → chat.completions + non-standard tool type (e.g. Mimo web_search)
+    #   "none"              → no live search; RA falls back to model knowledge only
+    WEB_SEARCH_STRATEGY: str = "openai_responses"
+
+    # JSON string passed as extra_body when WEB_SEARCH_STRATEGY="extra_body".
+    # Qwen example: '{"enable_search": true}'
+    WEB_SEARCH_EXTRA_BODY: str | None = None
+
+    # Context size hint; only used when WEB_SEARCH_STRATEGY="openai_responses"
+    WEB_SEARCH_CONTEXT_SIZE: str = "medium"  # "low" | "medium" | "high"
 
     # Embedding — any OpenAI-compatible embedding endpoint
     EMBEDDING_API_KEY: str | None = None

@@ -147,6 +147,7 @@ uv run pyinstaller eagle-backend.spec --noconfirm
 cd ../frontend
 pnpm tauri build
 # 如果需要临时分发：
+cd ..
 bash scripts/package-dmg.sh
 ```
 

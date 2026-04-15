@@ -68,7 +68,7 @@ cp .env.example .env
 # LLM Provider 选择："openai" 或 "anthropic"
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-...
-LLM_MODEL=gpt-4o
+LLM_MODEL=gpt-5.2
 # LLM_BASE_URL=https://your-provider.example.com/v1  # 可选，openai 带 /v1，anthropic 不带
 
 # Web Search（仅 openai Responses API）
@@ -178,7 +178,7 @@ uv run alembic revision --autogenerate -m "description"  # 生成新迁移
 |------|------|--------|------|
 | `LLM_PROVIDER` | ❌ | `openai` | LLM SDK 类型：`openai` 或 `anthropic` |
 | `LLM_API_KEY` | ✅ | — | LLM 调用密钥 |
-| `LLM_MODEL` | ❌ | `gpt-4o` | 使用的 LLM 模型名称 |
+| `LLM_MODEL` | ❌ | `gpt-5.2` | 使用的 LLM 模型名称 |
 | `LLM_BASE_URL` | ❌ | `None`（官方） | 自定义 LLM API 地址 |
 | `WEB_SEARCH_CONTEXT_SIZE` | ❌ | `low` | RA 网页搜索上下文大小（`low` / `medium` / `high`） |
 | `EMBEDDING_API_KEY` | ✅ | — | Embedding API Key |

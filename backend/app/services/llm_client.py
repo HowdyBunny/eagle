@@ -211,17 +211,29 @@ class LLMClient:
 
     async def research_chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
         """
-        Text completion with web search enabled.
-        OpenAI: uses Responses API (responses.create) with web_search tool.
-        Anthropic: uses Messages API with built-in web_search_20250305 tool.
+        Text completion with web search enabled. Routing is driven by
+        WEB_SEARCH_STRATEGY (independent of LLM_PROVIDER / SDK choice):
+
+          "openai_responses"  → OpenAI Responses API + web_search tool (official OpenAI only)
+          "anthropic_builtin" → Anthropic messages + web_search_20260209 built-in tool
+          "extra_body"        → chat.completions + WEB_SEARCH_EXTRA_BODY JSON (e.g. Qwen)
+          "openai_tool"       → chat.completions + non-standard tool type (e.g. Mimo)
+          "none"              → no live search; falls back to simple_chat
         """
         t0 = time.monotonic()
         error: str | None = None
         result = ""
+        strategy = settings.WEB_SEARCH_STRATEGY.lower()
         try:
-            if self.provider == "anthropic":
+            if strategy == "anthropic_builtin":
                 result = await self._research_chat_anthropic(messages, max_tokens)
-            else:
+            elif strategy == "extra_body":
+                result = await self._research_chat_extra_body(messages, max_tokens)
+            elif strategy == "openai_tool":
+                result = await self._research_chat_openai_tool(messages, max_tokens)
+            elif strategy == "none":
+                result = await self._simple_chat_openai(messages, max_tokens)
+            else:  # "openai_responses" (default)
                 result = await self._research_chat_openai(messages, max_tokens)
             return result
         except Exception as exc:
@@ -546,6 +558,41 @@ class LLMClient:
             }],
         )
         return response.output_text
+
+    async def _research_chat_extra_body(self, messages: list[dict], max_tokens: int) -> str:
+        """
+        Web search via extra_body params on chat.completions (e.g. Qwen enable_search).
+        WEB_SEARCH_EXTRA_BODY is a JSON string like '{"enable_search": true}'.
+        """
+        extra: dict = {}
+        if settings.WEB_SEARCH_EXTRA_BODY:
+            try:
+                extra = json.loads(settings.WEB_SEARCH_EXTRA_BODY)
+            except json.JSONDecodeError:
+                logger.warning("WEB_SEARCH_EXTRA_BODY is not valid JSON — ignoring")
+        response = await self._get_client().chat.completions.create(
+            model=settings.LLM_MODEL,
+            max_tokens=max_tokens,
+            messages=messages,
+            extra_body=extra if extra else None,
+        )
+        return response.choices[0].message.content or ""
+
+    async def _research_chat_openai_tool(self, messages: list[dict], max_tokens: int) -> str:
+        """
+        Web search via a non-standard tool type on chat.completions (e.g. Mimo web_search).
+        Passed through extra_body to bypass OpenAI SDK's tool-type validation.
+        """
+        response = await self._get_client().chat.completions.create(
+            model=settings.LLM_MODEL,
+            max_tokens=max_tokens,
+            messages=messages,
+            extra_body={
+                "tools": [{"type": "web_search", "max_keyword": 5, "force_search": True}],
+                "tool_choice": "auto",
+            },
+        )
+        return response.choices[0].message.content or ""
 
     # ── Anthropic implementations ───────────────────────────────────────────
 

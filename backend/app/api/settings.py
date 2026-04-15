@@ -26,6 +26,8 @@ class RuntimeSettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     llm_model: str | None = None
     llm_base_url: str | None = None
+    web_search_strategy: str | None = None
+    web_search_extra_body: str | None = None
     web_search_context_size: str | None = None
     embedding_api_key: str | None = None
     embedding_model: str | None = None
@@ -37,6 +39,8 @@ class RuntimeSettingsResponse(BaseModel):
     llm_provider: str
     llm_model: str
     llm_base_url: str | None
+    web_search_strategy: str
+    web_search_extra_body: str | None
     web_search_context_size: str
     embedding_model: str
     embedding_base_url: str | None
@@ -49,6 +53,8 @@ _ENV_KEY_MAP: tuple[tuple[str, str], ...] = (
     ("llm_api_key", "LLM_API_KEY"),
     ("llm_model", "LLM_MODEL"),
     ("llm_base_url", "LLM_BASE_URL"),
+    ("web_search_strategy", "WEB_SEARCH_STRATEGY"),
+    ("web_search_extra_body", "WEB_SEARCH_EXTRA_BODY"),
     ("web_search_context_size", "WEB_SEARCH_CONTEXT_SIZE"),
     ("embedding_api_key", "EMBEDDING_API_KEY"),
     ("embedding_model", "EMBEDDING_MODEL"),
@@ -111,6 +117,10 @@ async def update_runtime_settings(
         settings.LLM_MODEL = payload["llm_model"]
     if "llm_base_url" in payload:
         settings.LLM_BASE_URL = payload["llm_base_url"] or None
+    if "web_search_strategy" in payload:
+        settings.WEB_SEARCH_STRATEGY = payload["web_search_strategy"]
+    if "web_search_extra_body" in payload:
+        settings.WEB_SEARCH_EXTRA_BODY = payload["web_search_extra_body"] or None
     if "web_search_context_size" in payload:
         settings.WEB_SEARCH_CONTEXT_SIZE = payload["web_search_context_size"]
     if "embedding_api_key" in payload:
@@ -146,6 +156,8 @@ async def get_runtime_settings():
         llm_provider=settings.LLM_PROVIDER,
         llm_model=settings.LLM_MODEL,
         llm_base_url=settings.LLM_BASE_URL,
+        web_search_strategy=settings.WEB_SEARCH_STRATEGY,
+        web_search_extra_body=settings.WEB_SEARCH_EXTRA_BODY,
         web_search_context_size=settings.WEB_SEARCH_CONTEXT_SIZE,
         embedding_model=settings.EMBEDDING_MODEL,
         embedding_base_url=settings.EMBEDDING_BASE_URL,

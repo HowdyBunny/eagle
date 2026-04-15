@@ -1,9 +1,104 @@
 import { useState, type ReactNode } from 'react'
-import { Eye, EyeOff, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen } from 'lucide-react'
+import { Eye, EyeOff, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAppStore, type SettingsState } from '@/stores/app-store'
+import { useAppStore, type SettingsState, type VendorPresetId, type LLMProvider, type WebSearchStrategy } from '@/stores/app-store'
 import { updateRuntimeSettings } from '@/lib/api/settings'
+import { cn } from '@/lib/utils'
+
+// ────────────────────────────────────────────────────────────────────────────
+// Vendor preset definitions
+// ────────────────────────────────────────────────────────────────────────────
+
+interface VendorPreset {
+  id: VendorPresetId
+  label: string
+  region: string          // displayed as small tag
+  provider: LLMProvider
+  baseUrl: string
+  defaultModel: string
+  webSearchStrategy: WebSearchStrategy
+  webSearchExtraBody: string
+  webSearchOk: boolean
+  webSearchNote: string
+  isCustom?: boolean
+}
+
+const VENDOR_PRESETS: VendorPreset[] = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    region: '官方',
+    provider: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-5.2',
+    webSearchStrategy: 'openai_responses',
+    webSearchExtraBody: '',
+    webSearchOk: true,
+    webSearchNote: 'Responses API',
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    region: '官方',
+    provider: 'anthropic',
+    baseUrl: '',
+    defaultModel: 'claude-sonnet-4-6',
+    webSearchStrategy: 'anthropic_builtin',
+    webSearchExtraBody: '',
+    webSearchOk: true,
+    webSearchNote: '内置搜索工具',
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen',
+    region: '阿里',
+    provider: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModel: 'qwen3.6-plus',
+    webSearchStrategy: 'extra_body',
+    webSearchExtraBody: '{"enable_search": true}',
+    webSearchOk: true,
+    webSearchNote: 'enable_search',
+  },
+  {
+    id: 'glm',
+    label: 'GLM',
+    region: '智谱',
+    provider: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4/',
+    defaultModel: 'glm-5.1',
+    webSearchStrategy: 'none',
+    webSearchExtraBody: '',
+    webSearchOk: false,
+    webSearchNote: '联网待确认',
+  },
+  {
+    id: 'mimo',
+    label: 'Mimo',
+    region: '小米',
+    provider: 'openai',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
+    defaultModel: 'mimo-v2-pro',
+    webSearchStrategy: 'openai_tool',
+    webSearchExtraBody: '',
+    webSearchOk: true,
+    webSearchNote: 'web_search tool',
+  },
+  {
+    id: 'custom',
+    label: '第三方',
+    region: '自定义',
+    provider: 'openai',
+    baseUrl: '',
+    defaultModel: '',
+    webSearchStrategy: 'none',
+    webSearchExtraBody: '',
+    webSearchOk: false,
+    webSearchNote: '无内置联网',
+    isCustom: true,
+  },
+]
 
 // ────────────────────────────────────────────────────────────────────────────
 // Reusable primitives
@@ -146,28 +241,85 @@ function SettingsCard({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Vendor preset card
+// ────────────────────────────────────────────────────────────────────────────
+
+function PresetCard({
+  preset,
+  selected,
+  onSelect,
+}: {
+  preset: VendorPreset
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        'flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 transition-all text-center w-full',
+        selected
+          ? 'border-primary bg-primary/5'
+          : 'border-outline-variant/20 hover:border-outline-variant/50 hover:bg-surface-container-low/50',
+      )}
+    >
+      <span className={cn('text-[13px] font-headline font-bold', selected ? 'text-primary' : 'text-on-surface')}>
+        {preset.label}
+      </span>
+      <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">{preset.region}</span>
+      {preset.webSearchOk ? (
+        <span className="text-[9px] text-green-600 font-medium">联网 ✓</span>
+      ) : (
+        <span className="text-[9px] text-secondary">联网 —</span>
+      )}
+    </button>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Main view
 // ────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsView() {
-  const settings = useAppStore()
-  const { updateSettings, setBackendPort } = settings
+  const store = useAppStore()
+  const { updateSettings, setBackendPort } = store
 
-  // Local draft state per section, so save buttons commit atomically.
+  // ── LLM draft state ──────────────────────────────────────────────────────
   const [llm, setLlm] = useState({
-    llmProvider: settings.llmProvider,
-    llmApiKey: settings.llmApiKey,
-    llmModel: settings.llmModel,
-    llmBaseUrl: settings.llmBaseUrl,
-    webSearchContextSize: settings.webSearchContextSize,
+    vendorPreset: store.vendorPreset,
+    llmProvider: store.llmProvider,
+    llmApiKey: store.llmApiKey,
+    llmModel: store.llmModel,
+    llmBaseUrl: store.llmBaseUrl,
+    webSearchStrategy: store.webSearchStrategy,
+    webSearchExtraBody: store.webSearchExtraBody,
+    webSearchContextSize: store.webSearchContextSize,
   })
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const selectedPreset = VENDOR_PRESETS.find(p => p.id === llm.vendorPreset) ?? VENDOR_PRESETS[0]
+
+  function applyPreset(preset: VendorPreset) {
+    setLlm(prev => ({
+      ...prev,
+      vendorPreset: preset.id,
+      llmProvider: preset.provider,
+      llmBaseUrl: preset.baseUrl,
+      llmModel: preset.defaultModel,
+      webSearchStrategy: preset.webSearchStrategy,
+      webSearchExtraBody: preset.webSearchExtraBody,
+    }))
+  }
+
+  // ── Embedding draft state ────────────────────────────────────────────────
   const [emb, setEmb] = useState({
-    embeddingApiKey: settings.embeddingApiKey,
-    embeddingModel: settings.embeddingModel,
-    embeddingDimensions: settings.embeddingDimensions,
-    embeddingBaseUrl: settings.embeddingBaseUrl,
+    embeddingApiKey: store.embeddingApiKey,
+    embeddingModel: store.embeddingModel,
+    embeddingDimensions: store.embeddingDimensions,
+    embeddingBaseUrl: store.embeddingBaseUrl,
   })
-  const [sys, setSys] = useState({ backendPort: String(settings.backendPort) })
+  const [sys, setSys] = useState({ backendPort: String(store.backendPort) })
 
   const [saving, setSaving] = useState<string | null>(null)
   const [status, setStatus] = useState<Record<string, 'idle' | 'ok' | 'error'>>({
@@ -204,12 +356,11 @@ export default function SettingsView() {
             subtitle="Coordinator / Research / Evaluator Agent 共用"
             tooltip={
               <div className="space-y-1.5">
-                <p><strong>LLM Provider</strong>：SDK 类型。openai 走 responses API；anthropic 走 messages API。</p>
-                <p><strong>LLM API Key</strong>：模型调用密钥。</p>
-                <p><strong>LLM Model</strong>：模型名称，例如 gpt-5.2、claude-sonnet-4-6。</p>
-                <p><strong>LLM Base URL</strong>：第三方代理地址。openai 必须以 /v1 结尾；anthropic 不要带 /v1。留空使用官方默认。</p>
-                <p><strong>Web Search Context Size</strong>：RA 网页搜索上下文大小（仅 openai Responses API 支持）。</p>
-                <p className="text-primary pt-1">💡 LLM 和 Embedding 可以使用同一个 Provider 和 API Key。</p>
+                <p>选择模型厂商后，Base URL 和联网策略会自动填充。</p>
+                <p><strong>API Key</strong>：对应厂商的调用密钥。</p>
+                <p><strong>Model</strong>：模型名称，可在预填值基础上修改。</p>
+                <p><strong>Base URL</strong>：官方端点已预填，第三方中转需自行填入（需含 /v1）。</p>
+                <p className="text-primary pt-1">💡 LLM 和 Embedding 可以复用同一 API Key。</p>
               </div>
             }
             saving={saving === 'llm'}
@@ -220,50 +371,135 @@ export default function SettingsView() {
                 llm_api_key: llm.llmApiKey,
                 llm_model: llm.llmModel,
                 llm_base_url: llm.llmBaseUrl || undefined,
+                web_search_strategy: llm.webSearchStrategy,
+                web_search_extra_body: llm.webSearchExtraBody || undefined,
                 web_search_context_size: llm.webSearchContextSize,
               })
             })}
           >
+            {/* ── Vendor preset grid ── */}
+            <Field label="选择模型厂商">
+              <div className="grid grid-cols-6 gap-2">
+                {VENDOR_PRESETS.map(preset => (
+                  <PresetCard
+                    key={preset.id}
+                    preset={preset}
+                    selected={llm.vendorPreset === preset.id}
+                    onSelect={() => applyPreset(preset)}
+                  />
+                ))}
+              </div>
+            </Field>
+
+            {/* ── Web search status badge ── */}
+            <div className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium',
+              selectedPreset.webSearchOk
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-surface-container text-secondary border border-outline-variant/20',
+            )}>
+              <span>{selectedPreset.webSearchOk ? '✓' : '—'}</span>
+              <span>
+                Research Agent 联网：
+                {selectedPreset.webSearchOk
+                  ? `实时联网搜索（${selectedPreset.webSearchNote}）`
+                  : `不联网，使用模型自身知识（${selectedPreset.webSearchNote}）`}
+              </span>
+            </div>
+
+            {/* ── Core fields ── */}
+            <Field label="API Key">
+              <SecretInput
+                value={llm.llmApiKey}
+                onChange={(v) => setLlm({ ...llm, llmApiKey: v })}
+                placeholder="sk-..."
+              />
+            </Field>
+
             <div className="grid grid-cols-2 gap-4">
-              <Field label="LLM Provider">
-                <Select
-                  value={llm.llmProvider}
-                  onValueChange={(v) => setLlm({ ...llm, llmProvider: v as 'openai' | 'anthropic' })}
-                >
-                  <SelectTrigger className={selectTriggerClass}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Field label="Model" hint={selectedPreset.isCustom ? '填入厂商提供的模型名' : '可在预填值基础上修改'}>
+                <input
+                  value={llm.llmModel}
+                  onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })}
+                  placeholder={selectedPreset.defaultModel || '例：gpt-4o'}
+                  className={monoInputClass}
+                />
               </Field>
-              <Field label="LLM Model" hint="例如：gpt-5.2、claude-sonnet-4-6">
-                <input value={llm.llmModel} onChange={(e) => setLlm({ ...llm, llmModel: e.target.value })} placeholder="gpt-5.2" className={monoInputClass} />
+              <Field
+                label="Base URL"
+                hint={
+                  llm.vendorPreset === 'anthropic'
+                    ? 'Anthropic SDK 自动附加 /v1，此处留空即可'
+                    : '需以 /v1 结尾'
+                }
+              >
+                <input
+                  value={llm.llmBaseUrl}
+                  onChange={(e) => setLlm({ ...llm, llmBaseUrl: e.target.value })}
+                  placeholder={selectedPreset.isCustom ? 'https://openrouter.ai/api/v1' : selectedPreset.baseUrl}
+                  className={monoInputClass}
+                />
               </Field>
             </div>
-            <Field label="LLM API Key">
-              <SecretInput value={llm.llmApiKey} onChange={(v) => setLlm({ ...llm, llmApiKey: v })} placeholder="sk-..." />
-            </Field>
-            <Field label="LLM Base URL" hint="留空走官方端点。openai 带 /v1，anthropic 不带。">
-              <input value={llm.llmBaseUrl} onChange={(e) => setLlm({ ...llm, llmBaseUrl: e.target.value })} placeholder="https://your-provider.example.com/v1" className={monoInputClass} />
-            </Field>
-            <Field label="Web Search Context Size">
-              <Select
-                value={llm.webSearchContextSize}
-                onValueChange={(v) => setLlm({ ...llm, webSearchContextSize: v as 'low' | 'medium' | 'high' })}
-              >
-                <SelectTrigger className={selectTriggerClass}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">low</SelectItem>
-                  <SelectItem value="medium">medium</SelectItem>
-                  <SelectItem value="high">high</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+
+            {/* ── Advanced toggle ── */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-on-surface transition-colors"
+            >
+              {showAdvanced ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              高级设置
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-4 pt-1 border-t border-outline-variant/10">
+                {llm.webSearchStrategy === 'extra_body' && (
+                  <Field
+                    label="Web Search Extra Body"
+                    hint="JSON 格式，作为 extra_body 传入 chat.completions（Qwen 已预填）"
+                  >
+                    <input
+                      value={llm.webSearchExtraBody}
+                      onChange={(e) => setLlm({ ...llm, webSearchExtraBody: e.target.value })}
+                      placeholder='{"enable_search": true}'
+                      className={monoInputClass}
+                    />
+                  </Field>
+                )}
+                {llm.webSearchStrategy === 'openai_responses' && (
+                  <Field label="Web Search Context Size" hint="仅 OpenAI Responses API 生效">
+                    <Select
+                      value={llm.webSearchContextSize}
+                      onValueChange={(v) => setLlm({ ...llm, webSearchContextSize: v as 'low' | 'medium' | 'high' })}
+                    >
+                      <SelectTrigger className={selectTriggerClass}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">low</SelectItem>
+                        <SelectItem value="medium">medium</SelectItem>
+                        <SelectItem value="high">high</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+                <Field label="SDK Provider" hint="通常无需修改，由厂商选择自动决定">
+                  <Select
+                    value={llm.llmProvider}
+                    onValueChange={(v) => setLlm({ ...llm, llmProvider: v as 'openai' | 'anthropic' })}
+                  >
+                    <SelectTrigger className={selectTriggerClass}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI SDK</SelectItem>
+                      <SelectItem value="anthropic">Anthropic SDK</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+            )}
           </SettingsCard>
 
           {/* Embedding */}
