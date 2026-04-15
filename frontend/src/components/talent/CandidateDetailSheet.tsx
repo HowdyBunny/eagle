@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ExternalLink, Star, Pencil, Trash2, X, Save, RotateCcw, Briefcase, GraduationCap, MapPin, Clock, DollarSign, AlertTriangle, ClipboardList } from 'lucide-react'
+import { ExternalLink, Star, Pencil, Trash2, X, Save, RotateCcw, Briefcase, GraduationCap, MapPin, Clock, DollarSign, AlertTriangle, ClipboardList, Phone, Mail } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
 import { listCandidateEvaluations } from '@/lib/api/evaluations'
 import MatchDonut from '@/components/shared/MatchDonut'
@@ -136,6 +136,27 @@ function DetailView({
             </p>
           )}
         </div>
+
+        {/* Contact info */}
+        {(candidate.phone || candidate.email) && (
+          <section>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-secondary mb-2">联系方式</h3>
+            <div className="flex flex-col gap-1.5">
+              {candidate.phone && (
+                <a href={`tel:${candidate.phone}`}
+                  className="flex items-center gap-2 text-sm text-on-surface hover:text-primary transition-colors">
+                  <Phone size={13} className="text-secondary shrink-0" /> {candidate.phone}
+                </a>
+              )}
+              {candidate.email && (
+                <a href={`mailto:${candidate.email}`}
+                  className="flex items-center gap-2 text-sm text-on-surface hover:text-primary transition-colors">
+                  <Mail size={13} className="text-secondary shrink-0" /> {candidate.email}
+                </a>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Education */}
         {candidate.education && (
@@ -279,6 +300,8 @@ function EditForm({
     years_experience: candidate.years_experience ?? undefined,
     salary_range: candidate.salary_range ?? '',
     education: candidate.education ?? '',
+    phone: candidate.phone ?? '',
+    email: candidate.email ?? '',
     linkedin_url: candidate.linkedin_url ?? '',
     liepin_url: candidate.liepin_url ?? '',
     experience_summary: candidate.experience_summary ?? '',
@@ -346,6 +369,14 @@ function EditForm({
           <div>
             <label className={labelCls}>教育背景</label>
             <input className={inputCls} value={draft.education ?? ''} onChange={(e) => set('education', e.target.value || null)} />
+          </div>
+          <div>
+            <label className={labelCls}>手机号</label>
+            <input className={inputCls} value={draft.phone ?? ''} onChange={(e) => set('phone', e.target.value || null)} placeholder="138 0000 0000" />
+          </div>
+          <div>
+            <label className={labelCls}>邮箱</label>
+            <input type="email" className={inputCls} value={draft.email ?? ''} onChange={(e) => set('email', e.target.value || null)} placeholder="example@company.com" />
           </div>
           <div>
             <label className={labelCls}>LinkedIn URL</label>

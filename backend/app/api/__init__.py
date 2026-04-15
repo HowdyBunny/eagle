@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api import (
     candidates,
     conversations,
+    errors,
     evaluations,
     health,
     ontology,
@@ -16,6 +17,7 @@ from app.api import (
 
 def register_routers(app: FastAPI) -> None:
     app.include_router(health.router, prefix="/api")
+    app.include_router(errors.router, prefix="/api")
     app.include_router(projects.router, prefix="/api")
     app.include_router(candidates.router, prefix="/api")
     app.include_router(evaluations.router, prefix="/api")

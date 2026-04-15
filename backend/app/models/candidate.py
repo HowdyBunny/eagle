@@ -20,6 +20,8 @@ class Candidate(Base):
     education: Mapped[str | None] = mapped_column(String(500), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     liepin_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     raw_structured_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     experience_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)

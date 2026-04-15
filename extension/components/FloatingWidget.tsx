@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 const eagleIconUrl = browser.runtime.getURL('/icon/48.png');
 import type { CandidateData, Candidate, EvaluationStatus, Project } from '../lib/types';
-import { extractCandidateData, waitForProfile } from '../lib/parsers/index';
+import { extractCandidateData, waitForProfile, collectDiagnostics } from '../lib/parsers/index';
 import { sendMessage } from '../lib/messaging';
 import { CandidatePreview } from './CandidatePreview';
 import { ProjectSelector } from './ProjectSelector';
@@ -202,7 +202,10 @@ export function FloatingWidget() {
         <CandidatePreview
           data={candidateData}
           error={parseError}
-          onRetry={widgetState === 'idle' ? () => {
+          onRetry={widgetState === 'idle' ? async () => {
+            setCandidateData(null);
+            setParseError(undefined);
+            await waitForProfile();
             try {
               const data = extractCandidateData();
               setCandidateData(data);
@@ -212,6 +215,11 @@ export function FloatingWidget() {
             }
           } : undefined}
         />
+
+        {/* Diagnostics copy button — shown when extraction failed or returned Unknown */}
+        {widgetState === 'idle' && (parseError || candidateData?.full_name === 'Unknown') && (
+          <DiagnosticsButton />
+        )}
 
         {/* Status */}
         {widgetState === 'error' && (
@@ -346,5 +354,26 @@ function Spinner() {
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+function DiagnosticsButton() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const report = collectDiagnostics();
+    await navigator.clipboard.writeText(report);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="w-full rounded-md border border-eagle-border px-3 py-1.5 text-xs text-eagle-ink/60 hover:bg-eagle-card-end hover:text-eagle-ink transition-colors text-left"
+      title="复制诊断信息，发送给开发者排查问题"
+    >
+      {copied ? '✓ 已复制诊断信息' : '📋 复制诊断信息（发给开发者）'}
+    </button>
   );
 }

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Optional at startup so the packaged app can boot without credentials;
     # the frontend prompts the user to fill these in on first run.
     LLM_API_KEY: str | None = None
-    LLM_MODEL: str = "gpt-4o"
+    LLM_MODEL: str = "gpt-5.2"
     # openai:    LLM_BASE_URL must include /v1  (e.g. https://your-provider.com/v1)
     # anthropic: LLM_BASE_URL must NOT include /v1 (Anthropic SDK appends it automatically)
     LLM_BASE_URL: str | None = None

@@ -63,6 +63,7 @@ class SearchService:
         return search_results[request.offset: request.offset + request.limit]
 
     async def _sql_search(self, db: AsyncSession, request: CandidateSearchRequest) -> set[uuid.UUID]:
+        from sqlalchemy import or_
         query = select(Candidate.id)
         if request.location:
             query = query.where(Candidate.location.ilike(f"%{request.location}%"))
@@ -74,6 +75,17 @@ class SearchService:
             query = query.where(Candidate.current_company.ilike(f"%{request.current_company}%"))
         if request.source_platform:
             query = query.where(Candidate.source_platform == request.source_platform)
+        # Allow the free-text query to also match phone and email exactly
+        if request.query:
+            q = f"%{request.query}%"
+            query = query.union(
+                select(Candidate.id).where(
+                    or_(
+                        Candidate.phone.ilike(q),
+                        Candidate.email.ilike(q),
+                    )
+                )
+            )
 
         result = await db.execute(query)
         return {row[0] for row in result.fetchall()}

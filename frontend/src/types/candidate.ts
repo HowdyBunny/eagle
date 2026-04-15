@@ -8,6 +8,8 @@ export interface CandidateCreate {
   education?: string | null
   linkedin_url?: string | null
   liepin_url?: string | null
+  phone?: string | null
+  email?: string | null
   raw_structured_data?: Record<string, unknown> | null
   experience_summary?: string | null
   source_platform?: string | null
@@ -24,6 +26,8 @@ export interface CandidateResponse {
   education: string | null
   linkedin_url: string | null
   liepin_url: string | null
+  phone: string | null
+  email: string | null
   experience_summary: string | null
   raw_structured_data: Record<string, unknown> | null
   confidence_score: number | null
@@ -42,6 +46,8 @@ export interface CandidateUpdate {
   education?: string | null
   linkedin_url?: string | null
   liepin_url?: string | null
+  phone?: string | null
+  email?: string | null
   experience_summary?: string | null
 }
 

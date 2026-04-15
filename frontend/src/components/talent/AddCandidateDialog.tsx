@@ -29,6 +29,8 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
     years_experience: '',
     salary_range: '',
     education: '',
+    phone: '',
+    email: '',
     linkedin_url: '',
     liepin_url: '',
     experience_summary: '',
@@ -43,7 +45,7 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
     setForm({
       full_name: '', current_title: '', current_company: '', location: '',
       years_experience: '', salary_range: '', education: '',
-      linkedin_url: '', liepin_url: '', experience_summary: '',
+      phone: '', email: '', linkedin_url: '', liepin_url: '', experience_summary: '',
     })
     setError('')
     onClose()
@@ -63,6 +65,8 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
         years_experience: form.years_experience ? Number(form.years_experience) : null,
         salary_range: form.salary_range.trim() || null,
         education: form.education.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         liepin_url: form.liepin_url.trim() || null,
         experience_summary: form.experience_summary.trim() || null,
@@ -158,6 +162,29 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
                 value={form.education}
                 onChange={(e) => set('education', e.target.value)}
                 placeholder="清华大学 · 计算机硕士"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          {/* 手机 / 邮箱 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>手机号</Label>
+              <input
+                value={form.phone}
+                onChange={(e) => set('phone', e.target.value)}
+                placeholder="138 0000 0000"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <Label>邮箱</Label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                placeholder="example@company.com"
                 className={inputClass}
               />
             </div>

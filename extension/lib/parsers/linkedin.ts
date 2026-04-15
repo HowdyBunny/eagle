@@ -34,7 +34,7 @@ export function waitForLinkedInProfile(): Promise<void> {
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => { observer.disconnect(); resolve(); }, 10_000);
+    setTimeout(() => { observer.disconnect(); resolve(); }, 20_000);
   });
 }
 
@@ -566,11 +566,19 @@ function extractDesktopEducation(): { educationList: EducationEntry[]; education
 // Shared utilities
 // ============================================================================
 
-/** Find a profile section by its h2 heading text. */
+/** Multilingual section heading aliases. */
+const SECTION_ALIASES: Record<string, string[]> = {
+  About: ['About', '关于', 'À propos', 'Über', 'Acerca de', 'Summary'],
+  Experience: ['Experience', '工作经历', 'Expérience', 'Erfahrung', 'Experiencia', 'Experiences'],
+  Education: ['Education', '教育经历', 'Formation', 'Ausbildung', 'Educación', 'Educations'],
+};
+
+/** Find a profile section by its h2 heading text (language-agnostic). */
 function findSectionByHeading(heading: string): Element | null {
+  const aliases = SECTION_ALIASES[heading] ?? [heading];
   for (const section of Array.from(document.querySelectorAll('section'))) {
-    const h2Text = section.querySelector('h2.pvs-header__title')?.textContent ?? '';
-    if (h2Text.includes(heading)) return section;
+    const h2Text = section.querySelector('h2.pvs-header__title')?.textContent?.trim() ?? '';
+    if (aliases.some((a) => h2Text.includes(a))) return section;
   }
   return null;
 }

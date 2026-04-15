@@ -26,6 +26,8 @@ async def create_candidate(db: AsyncSession, data: CandidateCreate) -> Candidate
         education=data.education,
         linkedin_url=data.linkedin_url,
         liepin_url=data.liepin_url,
+        phone=data.phone,
+        email=data.email,
         raw_structured_data=data.raw_structured_data,
         experience_summary=data.experience_summary,
         confidence_score=confidence,

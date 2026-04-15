@@ -14,6 +14,8 @@ class CandidateCreate(BaseModel):
     education: str | None = None
     linkedin_url: str | None = None
     liepin_url: str | None = None
+    phone: str | None = None
+    email: str | None = None
     raw_structured_data: dict | None = None
     experience_summary: str | None = None
     source_platform: str | None = None
@@ -29,6 +31,8 @@ class CandidateUpdate(BaseModel):
     education: str | None = None
     linkedin_url: str | None = None
     liepin_url: str | None = None
+    phone: str | None = None
+    email: str | None = None
     raw_structured_data: dict | None = None
     experience_summary: str | None = None
 
@@ -46,6 +50,8 @@ class CandidateResponse(BaseModel):
     education: str | None
     linkedin_url: str | None
     liepin_url: str | None
+    phone: str | None
+    email: str | None
     experience_summary: str | None
     raw_structured_data: dict | None
     confidence_score: float | None

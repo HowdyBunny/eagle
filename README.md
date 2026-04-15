@@ -146,6 +146,8 @@ uv run pyinstaller eagle-backend.spec --noconfirm
 # 2. 打包整个桌面应用
 cd ../frontend
 pnpm tauri build
+# 如果需要临时分发：
+bash scripts/package-dmg.sh
 ```
 
 macOS 输出产物：
