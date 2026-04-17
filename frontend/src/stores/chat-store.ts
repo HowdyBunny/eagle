@@ -10,10 +10,13 @@ interface ChatState {
   /** Current tool label shown in the spinner (null when not executing a tool) */
   streamingStatus: string | null
   error: string | null
+  /** The optimistic message that failed to send — null when no failure */
+  failedMessage: { id: string; content: string } | null
   _loadedProjectId: string | null
   _sendingProjectId: string | null
   loadHistory: (projectId: string) => Promise<void>
   sendMessage: (projectId: string, message: string) => Promise<void>
+  retryMessage: (projectId: string) => Promise<void>
   clearMessages: () => void
 }
 
@@ -23,6 +26,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingContent: '',
   streamingStatus: null,
   error: null,
+  failedMessage: null,
   _loadedProjectId: null,
   _sendingProjectId: null,
 
@@ -39,22 +43,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  retryMessage: async (projectId) => {
+    const { failedMessage } = get()
+    if (!failedMessage) return
+    const content = failedMessage.content
+    set({
+      messages: get().messages.filter((m) => m.id !== failedMessage.id),
+      failedMessage: null,
+      error: null,
+    })
+    await get().sendMessage(projectId, content)
+  },
+
   sendMessage: async (projectId, message) => {
-    // Optimistically add user message
+    const { failedMessage } = get()
+    // Optimistically add user message; if a previous failed message exists, discard it first
+    const optimisticId = `optimistic-${Date.now()}`
     const optimisticMsg: ConversationLogResponse = {
-      id: `optimistic-${Date.now()}`,
+      id: optimisticId,
       project_id: projectId,
       role: 'hunter',
       content: message,
       intent_json: null,
       created_at: new Date().toISOString(),
     }
+    const prevMessages = failedMessage
+      ? get().messages.filter((m) => m.id !== failedMessage.id)
+      : get().messages
     set({
-      messages: [...get().messages, optimisticMsg],
+      messages: [...prevMessages, optimisticMsg],
       sending: true,
       streamingContent: '',
       streamingStatus: null,
       _sendingProjectId: projectId,
+      failedMessage: null,
       error: null,
     })
 
@@ -103,7 +125,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         if (event.type === 'error') {
-          set({ error: event.message, sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
+          set({ error: event.message, sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null, failedMessage: { id: optimisticId, content: message } })
           return
         }
       }
@@ -111,9 +133,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Stream ended without a done event (shouldn't happen, handle gracefully)
       set({ sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
     } catch (e) {
-      set({ error: String(e), sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null })
+      set({ error: String(e), sending: false, streamingContent: '', streamingStatus: null, _sendingProjectId: null, failedMessage: { id: optimisticId, content: message } })
     }
   },
 
-  clearMessages: () => set({ messages: [], streamingContent: '', streamingStatus: null }),
+  clearMessages: () => set({ messages: [], streamingContent: '', streamingStatus: null, failedMessage: null, error: null }),
 }))

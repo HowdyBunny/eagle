@@ -133,18 +133,29 @@ class LLMClient:
     def provider(self) -> str:
         return settings.LLM_PROVIDER.lower()
 
-    def _get_client(self):
+    def _get_client(self, timeout: float = 180.0):
+        """
+        Create a fresh SDK client on every call so hot-updated settings take effect.
+
+        timeout: total seconds before the request is abandoned.
+          - agentic_loop / simple_chat use the default (180s).
+          - research_chat passes a longer timeout because RA does multiple web
+            searches and generates a large JSON report; some models need 2-3 min.
+        """
         if self.provider == "anthropic":
             import anthropic
             return anthropic.AsyncAnthropic(
                 api_key=settings.LLM_API_KEY,
                 base_url=settings.LLM_BASE_URL,
+                timeout=timeout,
             )
         else:
             from openai import AsyncOpenAI
+            import httpx
             return AsyncOpenAI(
                 api_key=settings.LLM_API_KEY,
                 base_url=settings.LLM_BASE_URL,
+                timeout=httpx.Timeout(timeout, connect=10.0),
             )
 
     # ── Public interface ────────────────────────────────────────────────────
@@ -186,7 +197,7 @@ class LLMClient:
                 error=error,
             )
 
-    async def simple_chat(self, messages: list[dict], max_tokens: int = 2048) -> str:
+    async def simple_chat(self, messages: list[dict], max_tokens: int = 4096) -> str:
         """Single-turn text completion, no tools."""
         t0 = time.monotonic()
         error: str | None = None
@@ -549,7 +560,7 @@ class LLMClient:
         # Concatenate system instructions + user prompt into a single string.
         parts = [m["content"] for m in messages if m.get("content")]
         combined_input = "\n\n---\n\n".join(parts)
-        response = await self._get_client().responses.create(
+        response = await self._get_client(timeout=300.0).responses.create(
             model=settings.LLM_MODEL,
             input=combined_input,
             tools=[{
@@ -570,7 +581,7 @@ class LLMClient:
                 extra = json.loads(settings.WEB_SEARCH_EXTRA_BODY)
             except json.JSONDecodeError:
                 logger.warning("WEB_SEARCH_EXTRA_BODY is not valid JSON — ignoring")
-        response = await self._get_client().chat.completions.create(
+        response = await self._get_client(timeout=300.0).chat.completions.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             messages=messages,
@@ -583,7 +594,7 @@ class LLMClient:
         Web search via a non-standard tool type on chat.completions (e.g. Mimo web_search).
         Passed through extra_body to bypass OpenAI SDK's tool-type validation.
         """
-        response = await self._get_client().chat.completions.create(
+        response = await self._get_client(timeout=300.0).chat.completions.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             messages=messages,
@@ -773,7 +784,7 @@ class LLMClient:
 
     async def _research_chat_anthropic(self, messages: list[dict], max_tokens: int) -> str:
         system, msgs = _extract_system(messages)
-        response = await self._get_client().messages.create(
+        response = await self._get_client(timeout=300.0).messages.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
             system=system,

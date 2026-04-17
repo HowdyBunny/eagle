@@ -135,14 +135,24 @@ class ResearchAgent:
 
         # Save markdown report to file
         report_path = await self._save_report(project_id, topic, markdown_report)
+        logger.info(f"RA report file saved: {report_path}")
 
         # Save ontology to database
         ontology = await ontology_service.create_ontology(self.db, ontology_data)
+        logger.info(f"RA ontology saved: id={ontology.id}")
 
-        # Embed knowledge chunks
+        # Embed knowledge chunks (best-effort — failure does not block report/DB record)
+        embedded_count = 0
         for chunk_text in knowledge_chunks:
             if chunk_text.strip():
-                await self.embedding_svc.embed_industry_chunk(ontology.id, chunk_text.strip())
+                result = await self.embedding_svc.embed_industry_chunk(ontology.id, chunk_text.strip())
+                if result:
+                    embedded_count += 1
+        if embedded_count < len([c for c in knowledge_chunks if c.strip()]):
+            logger.warning(
+                f"RA: only {embedded_count}/{len(knowledge_chunks)} chunks embedded "
+                f"(check EMBEDDING_API_KEY and EMBEDDING_BASE_URL)"
+            )
 
         research = await research_service.create_research(
             db=self.db,

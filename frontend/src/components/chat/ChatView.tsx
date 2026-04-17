@@ -14,7 +14,7 @@ export default function ChatView() {
   const { currentProjectId, currentProject, selectProject, llmApiKey, embeddingApiKey } = useAppStore()
   const { openOnboarding } = useUIStore()
   const settingsOk = Boolean(llmApiKey && embeddingApiKey)
-  const { messages, sending, streamingContent, streamingStatus, error: storeError, _sendingProjectId, loadHistory, sendMessage } = useChatStore()
+  const { messages, sending, streamingContent, streamingStatus, error: storeError, failedMessage, _sendingProjectId, loadHistory, sendMessage, retryMessage } = useChatStore()
   const isSendingHere = sending && _sendingProjectId === currentProjectId
   const bottomRef = useRef<HTMLDivElement>(null)
   const [bootstrapping, setBootstrapping] = useState(false)
@@ -145,7 +145,12 @@ export default function ChatView() {
           msg.role === 'assistant' ? (
             <AgentBubble key={msg.id} message={msg} />
           ) : (
-            <UserBubble key={msg.id} message={msg} />
+            <UserBubble
+              key={msg.id}
+              message={msg}
+              failed={failedMessage?.id === msg.id}
+              onRetry={failedMessage?.id === msg.id && currentProjectId ? () => retryMessage(currentProjectId) : undefined}
+            />
           )
         )}
 

@@ -63,19 +63,22 @@ class EmbeddingService:
         self,
         ontology_id: uuid.UUID,
         content_text: str,
-    ) -> dict:
-        chunk_id = str(uuid.uuid4())
-        embedding = await self.get_embedding(content_text)
-        get_industry_table().add(
-            [
-                {
-                    "id": chunk_id,
-                    "vector": embedding,
-                    "document": content_text,
-                    "source_ontology_id": str(ontology_id),
-                    "embedding_model_version": settings.EMBEDDING_MODEL,
-                }
-            ]
-        )
-        logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
-        return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}
+    ) -> dict | None:
+        try:
+            chunk_id = str(uuid.uuid4())
+            embedding = await self.get_embedding(content_text)
+            get_industry_table().add(
+                [
+                    {
+                        "id": chunk_id,
+                        "vector": embedding,
+                        "document": content_text,
+                        "source_ontology_id": str(ontology_id),
+                        "embedding_model_version": settings.EMBEDDING_MODEL,
+                    }
+                ]
+            )
+            logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
+            return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}
+        except Exception as e:
+            logger.error(f"Failed to embed industry chunk for ontology {ontology_id}: {e}")

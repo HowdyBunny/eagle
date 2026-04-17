@@ -4,8 +4,13 @@ Tool definitions for the Coordinator Agent (CA) — OpenAI function-calling form
 These tools bridge the LLM's function calls to actual service layer operations.
 """
 
+import asyncio
 import uuid
 from typing import Any
+
+# Keeps strong references to fire-and-forget tasks so they are not GC-collected
+# before they complete (asyncio itself keeps references, but this is defensive).
+_background_tasks: set[asyncio.Task] = set()
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -286,14 +291,31 @@ class ToolExecutor:
         resolved_id = self._resolve_project_id(project_id)
         if resolved_id is None:
             return {"error": "project_id is required"}
-        from app.agents.research import ResearchAgent
-        agent = ResearchAgent(self.db)
-        research = await agent.research(resolved_id, topic, additional_context)
+
+        # Fire-and-forget: RA runs in its own DB session so the CA stream
+        # returns immediately instead of blocking for 20-120 s of web search.
+        from app.database import async_session_maker
+        from app.utils.logger import logger
+
+        async def _run_ra():
+            async with async_session_maker() as db:
+                from app.agents.research import ResearchAgent
+                agent = ResearchAgent(db)
+                try:
+                    await agent.research(resolved_id, topic, additional_context)
+                except Exception:
+                    logger.exception(
+                        f"RA background task failed for project {resolved_id}, topic='{topic}'"
+                    )
+
+        task = asyncio.create_task(_run_ra())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
         return {
             "project_id": str(resolved_id),
             "topic": topic,
-            "research_id": str(research.id),
-            "status": "research_complete",
+            "status": "research_triggered",
         }
 
     async def _handle_update_preference(
