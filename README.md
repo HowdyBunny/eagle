@@ -74,6 +74,11 @@ eagle/
 
 ## 快速开始Quick Start（开发模式）
 
+```bash
+git clone git@github.com:HowdyBunny/eagle.git
+cd eagle
+```
+
 ### 1. 启动后端
 
 ```bash

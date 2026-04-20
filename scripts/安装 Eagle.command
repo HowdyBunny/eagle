@@ -1,6 +1,9 @@
 #!/bin/bash
 # Eagle 安装脚本 — 在 DMG 里双击即可运行
 
+# 清除本脚本自身的隔离标记，避免二次拦截
+xattr -d com.apple.quarantine "$0" 2>/dev/null || true
+
 set -e
 
 APP_NAME="Eagle.app"
