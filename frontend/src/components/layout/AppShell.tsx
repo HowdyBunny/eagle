@@ -6,6 +6,7 @@ import TopBar from './TopBar'
 import OnboardingModal from '@/components/shared/OnboardingModal'
 import { useAppStore } from '@/stores/app-store'
 import { useUIStore } from '@/stores/ui-store'
+import { getRuntimeSettings } from '@/lib/api/settings'
 
 // ── Backend readiness constants ───────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ async function pingHealth(): Promise<boolean> {
 
 export default function AppShell() {
   const { pathname } = useLocation()
-  const { llmApiKey, embeddingApiKey } = useAppStore()
+  const { llmApiKey, embeddingApiKey, updateSettings } = useAppStore()
   const { openOnboarding } = useUIStore()
   const [backendReady, setBackendReady] = useState(false)
 
@@ -76,7 +77,28 @@ export default function AppShell() {
       while (!cancelled) {
         const ok = await pingHealth()
         if (ok) {
-          if (!cancelled) setBackendReady(true)
+          if (cancelled) return
+          // Sync non-secret fields from the backend (.env) into the frontend
+          // store so that Settings UI always reflects what the backend actually uses.
+          // API keys are excluded from GET /settings for security and remain
+          // as stored in localStorage.
+          try {
+            const s = await getRuntimeSettings()
+            updateSettings({
+              llmProvider: s.llm_provider as 'openai' | 'anthropic',
+              llmModel: s.llm_model,
+              llmBaseUrl: s.llm_base_url ?? '',
+              webSearchStrategy: s.web_search_strategy as import('@/stores/app-store').WebSearchStrategy,
+              webSearchExtraBody: s.web_search_extra_body ?? '',
+              webSearchContextSize: s.web_search_context_size as 'low' | 'medium' | 'high',
+              embeddingModel: s.embedding_model,
+              embeddingBaseUrl: s.embedding_base_url ?? '',
+              embeddingDimensions: s.embedding_dimensions,
+            })
+          } catch {
+            // Non-fatal: fall back to whatever is in localStorage.
+          }
+          setBackendReady(true)
           return
         }
         if (Date.now() >= deadline) {

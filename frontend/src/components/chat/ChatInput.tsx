@@ -15,10 +15,12 @@ const QUICK_ACTIONS = [
 export default function ChatInput({ onSend, disabled, disableQuickActions }: ChatInputProps) {
   const [text, setText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // Track IME composition state manually. On macOS, the browser fires
-  // compositionend *before* keydown when Enter confirms a composition,
-  // so e.nativeEvent.isComposing is already false by the time we check it.
+  // On macOS, compositionend fires *before* keydown when Enter confirms a
+  // composition, so isComposingRef is already false by the time handleKeyDown
+  // runs. justFinishedComposingRef stays true across that keydown and is
+  // cleared asynchronously via setTimeout(0) after all sync events settle.
   const isComposingRef = useRef(false)
+  const justFinishedComposingRef = useRef(false)
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -35,7 +37,7 @@ export default function ChatInput({ onSend, disabled, disableQuickActions }: Cha
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current) {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current && !justFinishedComposingRef.current) {
       e.preventDefault()
       handleSubmit()
     }
@@ -67,7 +69,11 @@ export default function ChatInput({ onSend, disabled, disableQuickActions }: Cha
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             onCompositionStart={() => { isComposingRef.current = true }}
-            onCompositionEnd={() => { isComposingRef.current = false }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false
+              justFinishedComposingRef.current = true
+              setTimeout(() => { justFinishedComposingRef.current = false }, 0)
+            }}
             placeholder="向 Coordinator Agent 发送消息..."
             rows={1}
             className="w-full bg-transparent text-sm text-on-surface placeholder:text-secondary/50 resize-none outline-none leading-relaxed"
