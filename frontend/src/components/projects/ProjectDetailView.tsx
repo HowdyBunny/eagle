@@ -125,9 +125,6 @@ export default function ProjectDetailView() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2">
                   <StatusBadge status={project.status} variant="project" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-secondary">
-                    {project.mode === 'precise' ? '精准模式' : '探索模式'}
-                  </span>
                 </div>
                 <h1 className="font-headline font-black text-2xl text-on-surface tracking-tight leading-tight">
                   {project.project_name}

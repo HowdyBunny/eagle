@@ -2,14 +2,13 @@
 from app.models.candidate import Candidate
 from app.models.conversation_log import ConversationLog, ConversationRole
 from app.models.preference_log import PreferenceLog
-from app.models.project import Project, ProjectMode, ProjectStatus
+from app.models.project import Project, ProjectStatus
 from app.models.project_candidate import ProjectCandidate, ProjectCandidateStatus
-from app.models.project_research import ProjectResearch
+from app.models.project_research import ProjectResearch, ResearchTaskStatus
 from app.models.skill_ontology import SkillOntology
 
 __all__ = [
     "Project",
-    "ProjectMode",
     "ProjectStatus",
     "Candidate",
     "ProjectCandidate",
@@ -17,6 +16,7 @@ __all__ = [
     "PreferenceLog",
     "SkillOntology",
     "ProjectResearch",
+    "ResearchTaskStatus",
     "ConversationLog",
     "ConversationRole",
 ]

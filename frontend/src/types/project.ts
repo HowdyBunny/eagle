@@ -1,4 +1,3 @@
-export type ProjectMode = 'precise' | 'explore'
 export type ProjectStatus = 'active' | 'completed' | 'archived'
 
 export interface ProjectCreate {
@@ -6,7 +5,6 @@ export interface ProjectCreate {
   project_name: string
   jd_raw?: string | null
   requirement_profile?: Record<string, unknown> | null
-  mode?: ProjectMode
 }
 
 export interface ProjectUpdate {
@@ -14,7 +12,6 @@ export interface ProjectUpdate {
   project_name?: string | null
   jd_raw?: string | null
   requirement_profile?: Record<string, unknown> | null
-  mode?: ProjectMode | null
   status?: ProjectStatus | null
 }
 
@@ -24,7 +21,6 @@ export interface ProjectResponse {
   project_name: string
   jd_raw: string | null
   requirement_profile: Record<string, unknown> | null
-  mode: ProjectMode
   status: ProjectStatus
   folder_path: string | null
   created_at: string

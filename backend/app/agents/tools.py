@@ -14,6 +14,9 @@ _background_tasks: set[asyncio.Task] = set()
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.evaluator import EvaluatorAgent
+from app.agents.research import ResearchAgent
+from app.database import async_session_maker
 from app.schemas.candidate import CandidateSearchRequest
 from app.schemas.preference import PreferenceCreate
 from app.schemas.project import ProjectUpdate
@@ -23,7 +26,9 @@ from app.services import (
     project_service,
     evaluation_service,
 )
+from app.services.research_service import create_research_task
 from app.services.search_service import SearchService
+from app.utils.logger import logger
 
 # ──────────────────────────────────────────────
 # OpenAI function-calling tool definitions
@@ -190,10 +195,18 @@ CA_TOOLS: list[dict] = [
 # ──────────────────────────────────────────────
 
 class ToolExecutor:
-    def __init__(self, db: AsyncSession, current_project_id: uuid.UUID | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        current_project_id: uuid.UUID | None = None,
+        evaluator_agent: EvaluatorAgent | None = None,
+        research_agent_class: type[ResearchAgent] | None = None,
+    ):
         self.db = db
         self.current_project_id = current_project_id
         self.search_svc = SearchService()
+        self._evaluator_agent = evaluator_agent
+        self._research_agent_class = research_agent_class or ResearchAgent
 
     def _resolve_project_id(self, project_id: str | None) -> uuid.UUID | None:
         """Parse project_id from LLM, fall back to current_project_id on bad input."""
@@ -275,8 +288,7 @@ class ToolExecutor:
             cid = uuid.UUID(str(candidate_id))
         except (ValueError, AttributeError):
             return {"error": f"Invalid candidate_id: {candidate_id}"}
-        from app.agents.evaluator import EvaluatorAgent
-        agent = EvaluatorAgent(self.db)
+        agent = self._evaluator_agent or EvaluatorAgent(self.db)
         pc = await agent.evaluate(resolved_id, cid, trigger_source="ca")
         return {
             "project_id": str(resolved_id),
@@ -292,18 +304,23 @@ class ToolExecutor:
         if resolved_id is None:
             return {"error": "project_id is required"}
 
-        # Fire-and-forget: RA runs in its own DB session so the CA stream
-        # returns immediately instead of blocking for 20-120 s of web search.
-        from app.database import async_session_maker
-        from app.utils.logger import logger
+        # Create the task record synchronously so CA can report task_id immediately.
+        # RA updates this record to COMPLETED or FAILED when it finishes.
+        task_record = await create_research_task(self.db, resolved_id, topic)
+        task_id = task_record.id
 
+        ra_class = self._research_agent_class
+
+        # Fire-and-forget: RA runs in its own DB session so CA returns immediately
+        # instead of blocking for 20-120 s of web search.
         async def _run_ra():
             async with async_session_maker() as db:
-                from app.agents.research import ResearchAgent
-                agent = ResearchAgent(db)
+                agent = ra_class(db)
                 try:
-                    await agent.research(resolved_id, topic, additional_context)
+                    await agent.research(resolved_id, topic, additional_context, task_id=task_id)
                 except Exception:
+                    # fail_research_task is already called inside research(); this
+                    # catch is a last-resort guard in case the DB update itself fails.
                     logger.exception(
                         f"RA background task failed for project {resolved_id}, topic='{topic}'"
                     )
@@ -315,6 +332,7 @@ class ToolExecutor:
         return {
             "project_id": str(resolved_id),
             "topic": topic,
+            "task_id": str(task_id),
             "status": "research_triggered",
         }
 

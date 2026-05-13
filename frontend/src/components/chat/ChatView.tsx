@@ -107,7 +107,6 @@ export default function ChatView() {
 
     const cleanup = bootstrapProject(
       message,
-      'precise',
       (event) => {
         handleBootstrapEvent(event)
         // Only close WS after the flow completes — not on component unmount

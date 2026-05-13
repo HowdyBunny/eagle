@@ -22,7 +22,6 @@ async def create_project(db: AsyncSession, data: ProjectCreate) -> Project:
         project_name=data.project_name,
         jd_raw=data.jd_raw,
         requirement_profile=data.requirement_profile,
-        mode=data.mode,
         folder_path=str(project_dir),
     )
     db.add(project)

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project_research import ProjectResearch
 from app.services import ontology_service, project_service, research_service
+from app.services.research_service import complete_research_task, fail_research_task
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_client import LLMClient
 from app.utils.logger import logger
@@ -118,6 +119,7 @@ class ResearchAgent:
         project_id: uuid.UUID,
         topic: str,
         additional_context: str | None = None,
+        task_id: uuid.UUID | None = None,
     ) -> ProjectResearch:
         logger.info(f"RA starting research on '{topic}' for project {project_id}")
 
@@ -125,43 +127,53 @@ class ResearchAgent:
         if additional_context:
             prompt += f"\n\n额外背景：{additional_context}"
 
-        full_text = await self.llm.research_chat([
-            {"role": "system", "content": RA_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ])
+        try:
+            full_text = await self.llm.research_chat([
+                {"role": "system", "content": RA_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ])
 
-        # Parse outputs
-        markdown_report, ontology_data, knowledge_chunks = self._parse_response(full_text, topic)
+            # Parse outputs
+            markdown_report, ontology_data, knowledge_chunks = self._parse_response(full_text, topic)
 
-        # Save markdown report to file
-        report_path = await self._save_report(project_id, topic, markdown_report)
-        logger.info(f"RA report file saved: {report_path}")
+            # Save markdown report to file
+            report_path = await self._save_report(project_id, topic, markdown_report)
+            logger.info(f"RA report file saved: {report_path}")
 
-        # Save ontology to database
-        ontology = await ontology_service.create_ontology(self.db, ontology_data)
-        logger.info(f"RA ontology saved: id={ontology.id}")
+            # Save ontology to database
+            ontology = await ontology_service.create_ontology(self.db, ontology_data)
+            logger.info(f"RA ontology saved: id={ontology.id}")
 
-        # Embed knowledge chunks (best-effort — failure does not block report/DB record)
-        embedded_count = 0
-        for chunk_text in knowledge_chunks:
-            if chunk_text.strip():
-                result = await self.embedding_svc.embed_industry_chunk(ontology.id, chunk_text.strip())
-                if result:
-                    embedded_count += 1
-        if embedded_count < len([c for c in knowledge_chunks if c.strip()]):
-            logger.warning(
-                f"RA: only {embedded_count}/{len(knowledge_chunks)} chunks embedded "
-                f"(check EMBEDDING_API_KEY and EMBEDDING_BASE_URL)"
-            )
+            # Embed knowledge chunks (best-effort — failure does not block report/DB record)
+            embedded_count = 0
+            for chunk_text in knowledge_chunks:
+                if chunk_text.strip():
+                    result = await self.embedding_svc.embed_industry_chunk(ontology.id, chunk_text.strip())
+                    if result:
+                        embedded_count += 1
+            if embedded_count < len([c for c in knowledge_chunks if c.strip()]):
+                logger.warning(
+                    f"RA: only {embedded_count}/{len(knowledge_chunks)} chunks embedded "
+                    f"(check EMBEDDING_API_KEY and EMBEDDING_BASE_URL)"
+                )
 
-        research = await research_service.create_research(
-            db=self.db,
-            project_id=project_id,
-            ontology_id=ontology.id,
-            report_file_path=report_path,
-        )
-        logger.info(f"RA completed research on '{topic}': report={report_path}, ontology={ontology.id}")
-        return research
+            if task_id is not None:
+                research = await complete_research_task(self.db, task_id, ontology.id, report_path)
+            else:
+                research = await research_service.create_research_task(self.db, project_id, topic)
+                research = await complete_research_task(self.db, research.id, ontology.id, report_path)
+
+            logger.info(f"RA completed research on '{topic}': report={report_path}, ontology={ontology.id}")
+            return research
+
+        except Exception as e:
+            logger.exception(f"RA failed research on '{topic}' for project {project_id}")
+            if task_id is not None:
+                try:
+                    await fail_research_task(self.db, task_id, str(e))
+                except Exception:
+                    logger.exception("RA: failed to update task status to FAILED")
+            raise
 
     def _parse_response(self, full_text: str, topic: str) -> tuple[str, dict, list[str]]:
         default_ontology = {

@@ -15,7 +15,7 @@ Protocol (server → client JSON events):
   {type: "error",           message: str}
 
 Client → server (single JSON message after connect):
-  {message: str, mode?: "precise"|"explore", api_key?: str}
+  {message: str, api_key?: str}
 """
 
 import json
@@ -88,7 +88,6 @@ async def bootstrap_project(ws: WebSocket):
         # 1. Receive initial payload
         raw = await ws.receive_json()
         message: str = raw.get("message", "")
-        mode: str = raw.get("mode", "precise")
 
         if not message.strip():
             await ws.send_json({"type": "error", "message": "消息不能为空"})
@@ -99,13 +98,10 @@ async def bootstrap_project(ws: WebSocket):
         await ws.send_json({"type": "status", "message": "正在创建项目…"})
 
         async with async_session_maker() as db:
-            from app.models.project import ProjectMode
-
             stub_data = ProjectCreate(
                 client_name=PLACEHOLDER_CLIENT,
                 project_name=_derive_stub_name(message),
                 jd_raw=message,
-                mode=ProjectMode(mode),
             )
             project = await project_service.create_project(db, stub_data)
             project_resp = ProjectResponse.model_validate(project)
@@ -126,7 +122,7 @@ async def bootstrap_project(ws: WebSocket):
 
             project_context = (
                 f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
-                f"\n- 项目名: {project.project_name}\n- 模式: {project.mode.value}"
+                f"\n- 项目名: {project.project_name}"
                 f"\n- 状态: {project.status.value}"
                 f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
                 f"你的第一个动作必须是调用 `update_project`（project_id={project.id}），"

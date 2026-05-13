@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.project import ProjectMode, ProjectStatus
+from app.models.project import ProjectStatus
 
 
 class ProjectCreate(BaseModel):
@@ -11,7 +11,6 @@ class ProjectCreate(BaseModel):
     project_name: str
     jd_raw: str | None = None
     requirement_profile: dict | None = None
-    mode: ProjectMode = ProjectMode.PRECISE
 
 
 class ProjectUpdate(BaseModel):
@@ -19,7 +18,6 @@ class ProjectUpdate(BaseModel):
     project_name: str | None = None
     jd_raw: str | None = None
     requirement_profile: dict | None = None
-    mode: ProjectMode | None = None
     status: ProjectStatus | None = None
 
 
@@ -31,7 +29,6 @@ class ProjectResponse(BaseModel):
     project_name: str
     jd_raw: str | None
     requirement_profile: dict | None
-    mode: ProjectMode
     status: ProjectStatus
     folder_path: str | None
     created_at: datetime

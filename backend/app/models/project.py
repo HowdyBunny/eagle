@@ -8,11 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base, UUIDString
 
 
-class ProjectMode(str, enum.Enum):
-    PRECISE = "precise"
-    EXPLORE = "explore"
-
-
 class ProjectStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
@@ -27,11 +22,6 @@ class Project(Base):
     project_name: Mapped[str] = mapped_column(String(255), nullable=False)
     jd_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
     requirement_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    mode: Mapped[ProjectMode] = mapped_column(
-        Enum(ProjectMode),
-        default=ProjectMode.PRECISE,
-        nullable=False,
-    )
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus),
         default=ProjectStatus.ACTIVE,

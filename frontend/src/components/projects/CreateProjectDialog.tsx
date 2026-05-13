@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useProjectStore } from '@/stores/project-store'
 import { useAppStore } from '@/stores/app-store'
 import { useNavigate } from 'react-router-dom'
-import type { ProjectMode } from '@/types'
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -18,7 +17,6 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
   const [clientName, setClientName] = useState('')
   const [projectName, setProjectName] = useState('')
   const [jdRaw, setJdRaw] = useState('')
-  const [mode, setMode] = useState<ProjectMode>('precise')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -26,11 +24,10 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
     setClientName('')
     setProjectName('')
     setJdRaw('')
-    setMode('precise')
     setError('')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!clientName.trim() || !projectName.trim()) {
       setError('客户名称和项目名称为必填项')
@@ -43,7 +40,6 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
         client_name: clientName.trim(),
         project_name: projectName.trim(),
         jd_raw: jdRaw.trim() || null,
-        mode,
       })
       selectProject(project)
       reset()
@@ -102,28 +98,6 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
               rows={4}
               className={`${inputClass} resize-none leading-relaxed`}
             />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-secondary mb-2">
-              搜索模式
-            </label>
-            <div className="flex gap-3">
-              {([['precise', '精准模式'], ['explore', '探索模式']] as [ProjectMode, string][]).map(([val, label]) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => setMode(val)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    mode === val
-                      ? 'kinetic-gradient text-white shadow-sm'
-                      : 'bg-surface-container-low text-secondary hover:text-on-surface'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

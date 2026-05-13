@@ -89,9 +89,6 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         )}
 
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-widest text-secondary">
-            {project.mode === 'precise' ? '精准模式' : '探索模式'}
-          </span>
           <button
             onClick={handleSelect}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-headline font-semibold text-primary hover:bg-primary/5 transition-colors group-hover:translate-x-0.5 transition-transform"

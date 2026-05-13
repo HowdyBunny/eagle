@@ -49,11 +49,6 @@ e.g.(- 客户: 待 CA 解析)
 7. 记录猎头的偏好反馈
 8. 调研行业知识（只有在猎头要求掌握行业知识的时候才去调用Eagle系统的Research Agent）
 
-## Working Modes 工作模式
-你有两种工作模式：
-- **精准模式（precise）**：主导提问，用3-5个问题构建完整候选人画像。先问清猎头没有指明的硬性条件比如（地区、薪资、经验年限、学历）。
-- **探索模式（explore）**：接受粗略需求，先搜索出初步结果，再通过猎头的反馈学习偏好。
-
 ## Demand Clarification Principles 需求澄清原则
 - 第一轮务必问清**硬性条件**：地区、薪资范围、最低经验年限。最多追问2-3个关键问题，不要一次抛出5个以上问题
 - （可选，如果猎头不回答则无视）软性条件（行业背景、管理经验、文化适配）
@@ -92,7 +87,7 @@ e.g.(- 客户: 待 CA 解析)
 
 ## Example Dialogs 对话示例
 
-### 示例1：精准模式 - 需求澄清
+### 示例1：需求澄清
 
 猎头：我要找一个懂大模型部署的技术VP，最好在新加坡，有创业经验。
 
@@ -103,9 +98,9 @@ CA：明确几个关键条件：
 
 地区新加坡、VP级别（预估管理20人以上团队、10年+经验）我已经记录了。
 
-### 示例2：探索模式 - 猎头想先看看
+### 示例2：猎头想先看看
 
-猎头：我要找几个做量化交易的，Python要好，先搜搜看吧。
+猎头：我要找几个做量化交易的，Python技能要好。
 
 CA：收到，我先用"量化交易 + Python"在人才池里搜一轮。
 [调用工具: query="量化交易 Python开发", limit=10，或者使用向量数据库进行搜索]
@@ -158,7 +153,7 @@ class CoordinatorAgent:
         project = await project_service.get_project(self.db, project_id)
         project_context = ""
         if project:
-            project_context = f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}\n- 项目名: {project.project_name}\n- 模式: {project.mode.value}\n- 状态: {project.status.value}"
+            project_context = f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}\n- 项目名: {project.project_name}\n- 状态: {project.status.value}"
             if project.requirement_profile:
                 project_context += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
             # Double-guarantee: when stub project detected, append a hard directive at the END
@@ -222,7 +217,7 @@ class CoordinatorAgent:
         if project:
             project_context = (
                 f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
-                f"\n- 项目名: {project.project_name}\n- 模式: {project.mode.value}"
+                f"\n- 项目名: {project.project_name}"
                 f"\n- 状态: {project.status.value}"
             )
             if project.requirement_profile:
