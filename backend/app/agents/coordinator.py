@@ -56,6 +56,13 @@ e.g.(- 客户: 待 CA 解析)
 - 解读猎头的隐晦表达，例如"懂大模型部署"需要进一步确认深度
 - 能从上下文推断的信息不要再问。比如猎头说"招一个CTO"，经验年限显然是10年以上，不需要确认
 
+## Requirement Update Rules 需求变更规则
+当猎头说"修改需求"、"把条件改成..."、"更新一下要求"、"放宽条件"、"加一条硬性要求"等类似表述时：
+1. 理解猎头的变更意图，将新条件合并进现有的 requirement_profile（保留不变的字段，只更新变更的字段）
+2. 立刻调用 `clarify_requirement` 工具将更新后的完整 requirement_profile 写入，这会自动触发重新向量化
+3. 简短确认变更内容，例如："已更新：经验年限改为5年以上，其他条件不变。"
+4. 如需要，主动询问猎头是否要基于新条件重新搜索人才
+
 ## Feedback Interpretation Rules 反馈解读规则
 当猎头评价候选人时（例如"技术够了但管理经验太少"），你应该：
 1. 调用 `update_preference` 记录这个偏好
@@ -148,30 +155,35 @@ class CoordinatorAgent:
         self.llm = LLMClient()
         self.db = db
 
-    async def chat(self, project_id: uuid.UUID, user_message: str) -> ChatResponse:
+    def _build_project_context(self, project) -> str:
+        ctx = (
+            f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
+            f"\n- 项目名: {project.project_name}\n- 状态: {project.status.value}"
+        )
+        if project.requirement_profile:
+            ctx += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
+        if project.client_name == "待 CA 解析":
+            ctx += (
+                f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
+                f"你的下一步动作必须是调用 `update_project`（project_id={project.id}），"
+                f"从猎头消息中提取真实客户名和岗位名后立即调用，不得跳过。**"
+            )
+        return ctx
+
+    async def chat(
+        self, project_id: uuid.UUID, user_message: str, thread_id: uuid.UUID | None = None
+    ) -> ChatResponse:
         # 1. Load project context
         project = await project_service.get_project(self.db, project_id)
-        project_context = ""
-        if project:
-            project_context = f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}\n- 项目名: {project.project_name}\n- 状态: {project.status.value}"
-            if project.requirement_profile:
-                project_context += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
-            # Double-guarantee: when stub project detected, append a hard directive at the END
-            # of system content so it appears immediately before the conversation history.
-            if project.client_name == "待 CA 解析":
-                project_context += (
-                    f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
-                    f"你的下一步动作必须是调用 `update_project`（project_id={project.id}），"
-                    f"从猎头消息中提取真实客户名和岗位名后立即调用，不得跳过。**"
-                )
+        project_context = self._build_project_context(project) if project else ""
 
         # 2. Build messages
         messages: list[dict] = [
             {"role": "system", "content": CA_SYSTEM_PROMPT + project_context},
         ]
 
-        # 3. Load conversation history
-        history = await conversation_service.get_history(self.db, project_id, limit=20)
+        # 3. Load conversation history (scoped to thread if provided)
+        history = await conversation_service.get_history(self.db, project_id, thread_id=thread_id, limit=20)
         for log in history:
             messages.append({
                 "role": "user" if log.role == ConversationRole.HUNTER else "assistant",
@@ -181,10 +193,10 @@ class CoordinatorAgent:
         # 4. Add current message and persist
         messages.append({"role": "user", "content": user_message})
         await conversation_service.save_message(
-            self.db, project_id, ConversationRole.HUNTER, user_message
+            self.db, project_id, ConversationRole.HUNTER, user_message, thread_id=thread_id
         )
 
-        # 5. Run agentic tool-use loop (pass project_id so ToolExecutor can guard stub duplication)
+        # 5. Run agentic tool-use loop
         tool_executor = ToolExecutor(self.db, current_project_id=project_id)
         reply_text, actions_taken, intent_json = await self.llm.agentic_loop(
             messages, CA_TOOLS, tool_executor
@@ -192,7 +204,7 @@ class CoordinatorAgent:
 
         # 6. Persist assistant reply
         await conversation_service.save_message(
-            self.db, project_id, ConversationRole.ASSISTANT, reply_text, intent_json
+            self.db, project_id, ConversationRole.ASSISTANT, reply_text, intent_json, thread_id=thread_id
         )
 
         return ChatResponse(
@@ -202,38 +214,20 @@ class CoordinatorAgent:
         )
 
     async def chat_stream(
-        self, project_id: uuid.UUID, user_message: str
+        self, project_id: uuid.UUID, user_message: str, thread_id: uuid.UUID | None = None
     ) -> AsyncGenerator[dict, None]:
         """
-        Streaming version of chat().
-
-        Yields the same event dicts as LLMClient.agentic_loop_stream(), with one
-        addition: the final "done" event is enriched with a `conversation_id`
-        after the assistant reply has been persisted to the database.
+        Streaming version of chat(). thread_id scopes history and persisted messages
+        to a specific conversation thread; None uses the legacy unthreaded history.
         """
-        # 1–4: identical setup to chat()
         project = await project_service.get_project(self.db, project_id)
-        project_context = ""
-        if project:
-            project_context = (
-                f"\n\n## 当前项目\n- 项目ID: {project.id}\n- 客户: {project.client_name}"
-                f"\n- 项目名: {project.project_name}"
-                f"\n- 状态: {project.status.value}"
-            )
-            if project.requirement_profile:
-                project_context += f"\n- 需求画像: {json.dumps(project.requirement_profile, ensure_ascii=False)}"
-            if project.client_name == "待 CA 解析":
-                project_context += (
-                    f"\n\n**[系统指令] 当前项目是占位项目（client_name='待 CA 解析'）。"
-                    f"你的下一步动作必须是调用 `update_project`（project_id={project.id}），"
-                    f"从猎头消息中提取真实客户名和岗位名后立即调用，不得跳过。**"
-                )
+        project_context = self._build_project_context(project) if project else ""
 
         messages: list[dict] = [
             {"role": "system", "content": CA_SYSTEM_PROMPT + project_context},
         ]
 
-        history = await conversation_service.get_history(self.db, project_id, limit=20)
+        history = await conversation_service.get_history(self.db, project_id, thread_id=thread_id, limit=20)
         for log in history:
             messages.append({
                 "role": "user" if log.role == ConversationRole.HUNTER else "assistant",
@@ -242,10 +236,9 @@ class CoordinatorAgent:
 
         messages.append({"role": "user", "content": user_message})
         await conversation_service.save_message(
-            self.db, project_id, ConversationRole.HUNTER, user_message
+            self.db, project_id, ConversationRole.HUNTER, user_message, thread_id=thread_id
         )
 
-        # 5. Run streaming agentic loop
         tool_executor = ToolExecutor(self.db, current_project_id=project_id)
         reply_text = ""
 
@@ -254,10 +247,9 @@ class CoordinatorAgent:
                 reply_text += event["delta"]
 
             if event["type"] == "done":
-                # Persist assistant reply before yielding done to the client
                 log = await conversation_service.save_message(
                     self.db, project_id, ConversationRole.ASSISTANT,
-                    event["reply_text"], event.get("intent_json"),
+                    event["reply_text"], event.get("intent_json"), thread_id=thread_id,
                 )
                 yield {**event, "conversation_id": str(log.id)}
                 return

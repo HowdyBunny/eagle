@@ -23,6 +23,7 @@ class SearchService:
         """
         Hybrid search: SQL filter (hard constraints) + LanceDB semantic search run in parallel.
         Results are merged, deduplicated, and ranked.
+        Supports semantic and SQL-based exclusion via exclude_query / exclude_companies / exclude_locations.
         """
         sql_task = asyncio.create_task(self._sql_search(db, request))
 
@@ -30,13 +31,24 @@ class SearchService:
         if request.query:
             vector_task = asyncio.create_task(self._vector_search(request.query, limit=request.limit * 2))
 
+        exclude_task = None
+        if request.exclude_query:
+            exclude_task = asyncio.create_task(self._vector_search(request.exclude_query, limit=100))
+
         sql_ids = await sql_task
         vector_results: dict[uuid.UUID, float] = {}
         if vector_task:
             vector_results = await vector_task
 
-        # Merge: union of both sets
-        all_ids = set(sql_ids) | set(vector_results.keys())
+        # Build semantic exclusion set: candidates whose experience is too close to the exclusion description
+        # Cosine distance < 0.45 means similarity > 0.55 — clearly matches the excluded profile
+        exclude_ids: set[uuid.UUID] = set()
+        if exclude_task:
+            exclude_vector_results = await exclude_task
+            exclude_ids = {cid for cid, dist in exclude_vector_results.items() if dist < 0.45}
+
+        # Merge: union of both sets, then remove excluded candidates
+        all_ids = (set(sql_ids) | set(vector_results.keys())) - exclude_ids
         if not all_ids:
             return []
 
@@ -63,7 +75,7 @@ class SearchService:
         return search_results[request.offset: request.offset + request.limit]
 
     async def _sql_search(self, db: AsyncSession, request: CandidateSearchRequest) -> set[uuid.UUID]:
-        from sqlalchemy import or_
+        from sqlalchemy import and_, or_
         query = select(Candidate.id)
         if request.location:
             query = query.where(Candidate.location.ilike(f"%{request.location}%"))
@@ -75,6 +87,17 @@ class SearchService:
             query = query.where(Candidate.current_company.ilike(f"%{request.current_company}%"))
         if request.source_platform:
             query = query.where(Candidate.source_platform == request.source_platform)
+        # SQL exclusions
+        if request.exclude_companies:
+            for company in request.exclude_companies:
+                query = query.where(
+                    or_(Candidate.current_company.is_(None), ~Candidate.current_company.ilike(f"%{company}%"))
+                )
+        if request.exclude_locations:
+            for loc in request.exclude_locations:
+                query = query.where(
+                    or_(Candidate.location.is_(None), ~Candidate.location.ilike(f"%{loc}%"))
+                )
         # Allow the free-text query to also match phone and email exactly
         if request.query:
             q = f"%{request.query}%"

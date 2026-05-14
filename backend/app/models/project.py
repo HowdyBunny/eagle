@@ -37,4 +37,5 @@ class Project(Base):
     project_candidates: Mapped[list["ProjectCandidate"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # noqa: F821
     preference_logs: Mapped[list["PreferenceLog"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # noqa: F821
     conversation_logs: Mapped[list["ConversationLog"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # noqa: F821
+    conversation_threads: Mapped[list["ConversationThread"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # noqa: F821
     project_research: Mapped[list["ProjectResearch"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # noqa: F821

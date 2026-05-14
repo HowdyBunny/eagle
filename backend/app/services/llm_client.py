@@ -356,6 +356,11 @@ class LLMClient:
                     }
                     for tc in msg.tool_calls
                 ]
+            # Reasoning models (DeepSeek R1, MiMo, etc.) require reasoning_content
+            # to be passed back on every subsequent turn — otherwise the API returns 400.
+            reasoning = getattr(msg, "reasoning_content", None)
+            if reasoning:
+                msg_dict["reasoning_content"] = reasoning
             msgs.append(msg_dict)
 
             if choice.finish_reason == "stop":
@@ -413,6 +418,7 @@ class LLMClient:
             )
 
             content_chunks: list[str] = []
+            reasoning_chunks: list[str] = []
             tool_calls_buffer: dict[int, dict] = {}  # index → {id, name, arguments}
             is_tool_round = False
             finish_reason: str | None = None
@@ -424,6 +430,11 @@ class LLMClient:
                 fr = chunk.choices[0].finish_reason
                 if fr:
                     finish_reason = fr
+
+                # Capture reasoning_content from thinking models (DeepSeek R1, MiMo, etc.)
+                rc = getattr(delta, "reasoning_content", None)
+                if rc:
+                    reasoning_chunks.append(rc)
 
                 # Accumulate tool_call fragments
                 if delta.tool_calls:
@@ -469,6 +480,9 @@ class LLMClient:
                     "content": "".join(content_chunks) or None,
                     "tool_calls": tool_calls_list,
                 }
+                # Reasoning models require reasoning_content to be echoed back
+                if reasoning_chunks:
+                    msg_dict["reasoning_content"] = "".join(reasoning_chunks)
                 msgs.append(msg_dict)
 
                 for tc in tool_calls_list:

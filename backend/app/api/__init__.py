@@ -11,6 +11,7 @@ from app.api import (
     projects,
     research,
     settings,
+    threads,
     ws_bootstrap,
 )
 
@@ -26,4 +27,5 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(research.router, prefix="/api")
     app.include_router(ontology.router, prefix="/api")
     app.include_router(settings.router, prefix="/api")
+    app.include_router(threads.router, prefix="/api")
     app.include_router(ws_bootstrap.router, prefix="/api")

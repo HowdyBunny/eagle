@@ -1,7 +1,7 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +17,6 @@ async def chat(
     project_id: uuid.UUID,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
-
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
@@ -25,7 +24,7 @@ async def chat(
 
     from app.agents.coordinator import CoordinatorAgent
     agent = CoordinatorAgent(db)
-    return await agent.chat(project_id, request.message)
+    return await agent.chat(project_id, request.message, thread_id=request.thread_id)
 
 
 @router.post("/{project_id}/chat/stream")
@@ -33,7 +32,6 @@ async def chat_stream(
     project_id: uuid.UUID,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
-
 ):
     """
     SSE streaming version of /chat.
@@ -54,7 +52,7 @@ async def chat_stream(
     async def event_generator():
         agent = CoordinatorAgent(db)
         try:
-            async for event in agent.chat_stream(project_id, request.message):
+            async for event in agent.chat_stream(project_id, request.message, thread_id=request.thread_id):
                 yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
@@ -72,12 +70,12 @@ async def chat_stream(
 @router.get("/{project_id}/conversations", response_model=list[ConversationLogResponse])
 async def list_conversations(
     project_id: uuid.UUID,
+    thread_id: uuid.UUID | None = Query(default=None),
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-
 ):
     project = await project_service.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return await conversation_service.list_conversations(db, project_id, skip=skip, limit=limit)
+    return await conversation_service.list_conversations(db, project_id, thread_id=thread_id, skip=skip, limit=limit)

@@ -14,7 +14,7 @@ export default function ChatView() {
   const { currentProjectId, currentProject, selectProject, llmApiKey, embeddingApiKey } = useAppStore()
   const { openOnboarding } = useUIStore()
   const settingsOk = Boolean(llmApiKey && embeddingApiKey)
-  const { messages, sending, streamingContent, streamingStatus, error: storeError, failedMessage, _sendingProjectId, loadHistory, sendMessage, retryMessage } = useChatStore()
+  const { messages, sending, streamingContent, streamingStatus, error: storeError, failedMessage, _sendingProjectId, currentThreadId, loadHistory, sendMessage, retryMessage } = useChatStore()
   const isSendingHere = sending && _sendingProjectId === currentProjectId
   const bottomRef = useRef<HTMLDivElement>(null)
   const [bootstrapping, setBootstrapping] = useState(false)
@@ -24,10 +24,10 @@ export default function ChatView() {
   const cleanupRef = useRef<(() => void) | null>(null)
   const bootstrapDoneRef = useRef(false)
 
-  // Reload history whenever the bound project changes (1:1 conversation).
+  // Reload history when project or active thread changes.
   useEffect(() => {
-    if (currentProjectId) loadHistory(currentProjectId)
-  }, [currentProjectId, loadHistory])
+    if (currentProjectId) loadHistory(currentProjectId, currentThreadId)
+  }, [currentProjectId, currentThreadId, loadHistory])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -159,6 +159,7 @@ export default function ChatView() {
             message={{
               id: 'streaming',
               project_id: currentProjectId ?? '',
+              thread_id: currentThreadId,
               role: 'assistant',
               content: streamingContent,
               intent_json: null,
@@ -174,6 +175,7 @@ export default function ChatView() {
             message={{
               id: 'bootstrap-streaming',
               project_id: '',
+              thread_id: null,
               role: 'assistant',
               content: bootstrapStreamingContent,
               intent_json: null,

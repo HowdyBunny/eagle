@@ -94,6 +94,17 @@ CA_TOOLS: list[dict] = [
                     "max_years_experience": {"type": "number", "description": "Maximum years of experience"},
                     "current_company": {"type": "string", "description": "Filter by current company"},
                     "limit": {"type": "integer", "description": "Max results to return", "default": 10},
+                    "exclude_query": {"type": "string", "description": "Semantic description of candidates to exclude, e.g. '纯数据分析背景，无实盘经验' or '学术研究型，无工业界经验'"},
+                    "exclude_companies": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Exclude candidates currently at these companies, e.g. ['某公司', '某集团']",
+                    },
+                    "exclude_locations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Exclude candidates in these locations, e.g. ['北京', '广州']",
+                    },
                 },
             },
         },
@@ -253,6 +264,9 @@ class ToolExecutor:
         max_years_experience: float | None = None,
         current_company: str | None = None,
         limit: int = 10,
+        exclude_query: str | None = None,
+        exclude_companies: list[str] | None = None,
+        exclude_locations: list[str] | None = None,
     ) -> dict:
         request = CandidateSearchRequest(
             query=query,
@@ -261,6 +275,9 @@ class ToolExecutor:
             max_years_experience=max_years_experience,
             current_company=current_company,
             limit=limit,
+            exclude_query=exclude_query,
+            exclude_companies=exclude_companies,
+            exclude_locations=exclude_locations,
         )
         results = await self.search_svc.hybrid_search(self.db, request)
         return {
@@ -275,6 +292,7 @@ class ToolExecutor:
                     "years_experience": r.candidate.years_experience,
                     "confidence_score": r.candidate.confidence_score,
                     "vector_score": r.vector_score,
+                    "experience_summary": r.candidate.experience_summary,
                 }
                 for r in results
             ],

@@ -8,6 +8,7 @@ from app.models.conversation_log import ConversationRole
 
 class ChatRequest(BaseModel):
     message: str
+    thread_id: uuid.UUID | None = None
 
 
 class ChatResponse(BaseModel):
@@ -21,6 +22,7 @@ class ConversationLogResponse(BaseModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
+    thread_id: uuid.UUID | None
     role: ConversationRole
     content: str
     intent_json: dict | None

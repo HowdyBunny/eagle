@@ -8,11 +8,12 @@ export async function sendChat(projectId: string, body: ChatRequest): Promise<Ch
 
 export async function getConversationHistory(
   projectId: string,
+  threadId?: string | null,
   skip = 0,
-  limit = 100
+  limit = 100,
 ): Promise<ConversationLogResponse[]> {
   const { data } = await apiClient.get(`/projects/${projectId}/conversations`, {
-    params: { skip, limit },
+    params: { ...(threadId ? { thread_id: threadId } : {}), skip, limit },
   })
   return data
 }
@@ -28,21 +29,16 @@ export type StreamEvent =
 /**
  * Calls POST /projects/{id}/chat/stream and yields parsed SSE events.
  * Uses native fetch so that ReadableStream is available (axios doesn't support it).
- *
- * NOTE: Must use an absolute URL — in the packaged Tauri app the webview origin
- * is tauri://localhost, so relative paths would resolve to the static frontend
- * bundle instead of the FastAPI backend.
  */
 export async function* sendChatStream(
   projectId: string,
   message: string,
+  threadId?: string | null,
 ): AsyncGenerator<StreamEvent> {
   const response = await fetch(`http://127.0.0.1:52777/api/projects/${projectId}/chat/stream`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ message }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, thread_id: threadId ?? null }),
   })
 
   if (!response.ok) {
@@ -59,8 +55,6 @@ export async function* sendChatStream(
     if (done) break
 
     buffer += decoder.decode(value, { stream: true })
-
-    // SSE messages are separated by double newlines
     const parts = buffer.split('\n\n')
     buffer = parts.pop() ?? ''
 

@@ -69,6 +69,10 @@ class CandidateSearchRequest(BaseModel):
     source_platform: str | None = None
     limit: int = 20
     offset: int = 0
+    # Exclusion filters
+    exclude_query: str | None = None        # Semantic: exclude candidates whose experience matches this description
+    exclude_companies: list[str] | None = None  # SQL: exclude candidates currently at these companies
+    exclude_locations: list[str] | None = None  # SQL: exclude candidates in these locations
 
 
 class CandidateSearchResult(BaseModel):

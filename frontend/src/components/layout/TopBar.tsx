@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/app-store'
+import ThreadSwitcher from '@/components/chat/ThreadSwitcher'
 
 const routeTitles: Record<string, string> = {
   '/': '对话',
@@ -31,6 +32,9 @@ export default function TopBar() {
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
             <span className="text-[10px] font-black uppercase tracking-widest text-primary">Eagle RA</span>
           </div>
+        )}
+        {pathname === '/' && currentProject && (
+          <ThreadSwitcher projectId={currentProject.id} />
         )}
       </div>
     </header>
