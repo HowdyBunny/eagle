@@ -130,7 +130,11 @@ async def update_runtime_settings(
     if "embedding_base_url" in payload:
         settings.EMBEDDING_BASE_URL = payload["embedding_base_url"] or None
     if "embedding_dimensions" in payload:
+        old_dim = settings.EMBEDDING_DIMENSIONS
         settings.EMBEDDING_DIMENSIONS = payload["embedding_dimensions"]
+        if settings.EMBEDDING_DIMENSIONS != old_dim:
+            from app.services.lancedb_service import validate_schemas
+            validate_schemas()
 
     # Persist to the user .env so the next restart still has these values.
     env_updates: dict[str, str] = {}

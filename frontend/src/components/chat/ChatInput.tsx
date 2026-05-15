@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Zap } from 'lucide-react'
+import { FileText, Loader2, Paperclip, Send, X, Zap } from 'lucide-react'
+import { extractDoc } from '@/lib/api/talent'
 
 interface ChatInputProps {
   onSend: (message: string) => void
@@ -14,11 +15,11 @@ const QUICK_ACTIONS = [
 
 export default function ChatInput({ onSend, disabled, disableQuickActions }: ChatInputProps) {
   const [text, setText] = useState('')
+  const [attachedDoc, setAttachedDoc] = useState<{ name: string; text: string } | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // On macOS, compositionend fires *before* keydown when Enter confirms a
-  // composition, so isComposingRef is already false by the time handleKeyDown
-  // runs. justFinishedComposingRef stays true across that keydown and is
-  // cleared asynchronously via setTimeout(0) after all sync events settle.
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const justFinishedComposingRef = useRef(false)
 
@@ -29,11 +30,38 @@ export default function ChatInput({ onSend, disabled, disableQuickActions }: Cha
     }
   }, [text])
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setExtracting(true)
+    setAttachedDoc(null)
+    setExtractError(null)
+    try {
+      const result = await extractDoc(file)
+      setAttachedDoc({ name: result.filename, text: result.text })
+    } catch {
+      setExtractError('文件解析失败，请确认格式为 PDF 或 Word，且非扫描件')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
   const handleSubmit = () => {
+    if (disabled || extracting) return
     const trimmed = text.trim()
-    if (!trimmed || disabled) return
-    onSend(trimmed)
+    if (!trimmed && !attachedDoc) return
+
+    let messageToSend = trimmed
+    if (attachedDoc) {
+      const docSection = `以下是需求文件内容（${attachedDoc.name}）：\n\n${attachedDoc.text}`
+      messageToSend = trimmed ? `${docSection}\n\n---\n${trimmed}` : docSection
+    }
+
+    onSend(messageToSend)
     setText('')
+    setAttachedDoc(null)
+    setExtractError(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -60,6 +88,35 @@ export default function ChatInput({ onSend, disabled, disableQuickActions }: Cha
         ))}
       </div>
 
+      {/* Attached doc chip */}
+      {(extracting || attachedDoc || extractError) && (
+        <div className="mb-2 flex items-center gap-2">
+          {(extracting || attachedDoc) && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 text-xs">
+              {extracting ? (
+                <Loader2 size={12} className="animate-spin text-primary shrink-0" />
+              ) : (
+                <FileText size={12} className="text-primary shrink-0" />
+              )}
+              <span className="font-medium text-on-surface">
+                {extracting ? '解析中…' : attachedDoc!.name}
+              </span>
+              {!extracting && (
+                <button
+                  onClick={() => setAttachedDoc(null)}
+                  className="ml-0.5 text-secondary hover:text-red-500 transition-colors"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          )}
+          {extractError && (
+            <span className="text-[11px] text-red-500">{extractError}</span>
+          )}
+        </div>
+      )}
+
       {/* Input row */}
       <div className="flex items-end gap-3">
         <div className="flex-1 bg-surface-container-low rounded-2xl px-4 py-3 border border-outline-variant/10 focus-within:border-primary/30 transition-colors">
@@ -79,9 +136,28 @@ export default function ChatInput({ onSend, disabled, disableQuickActions }: Cha
             className="w-full bg-transparent text-sm text-on-surface placeholder:text-secondary/50 resize-none outline-none leading-relaxed"
           />
         </div>
+
+        {/* Attach button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || extracting}
+          title="上传需求文件（PDF / Word）"
+          className="w-11 h-11 rounded-xl bg-surface-container-low border border-outline-variant/10 flex items-center justify-center text-secondary hover:text-primary hover:border-primary/20 transition-colors disabled:opacity-40"
+        >
+          <Paperclip size={16} />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {/* Send button */}
         <button
           onClick={handleSubmit}
-          disabled={!text.trim() || disabled}
+          disabled={(!text.trim() && !attachedDoc) || disabled || extracting}
           className="w-11 h-11 rounded-xl kinetic-gradient flex items-center justify-center text-white hover:shadow-lg hover:-translate-y-0.5 transition-all scale-98-active disabled:opacity-40 disabled:translate-y-0 disabled:shadow-none"
         >
           <Send size={16} />

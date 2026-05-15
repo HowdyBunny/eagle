@@ -12,6 +12,7 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
     - LLM_BASE_URL must NOT include /v1
 """
 
+import base64
 import json
 import time
 from datetime import datetime, timezone
@@ -19,6 +20,10 @@ from typing import Any, AsyncGenerator
 
 from app.config import settings
 from app.utils.logger import logger
+
+
+class VisionNotSupportedError(Exception):
+    """Raised when the configured LLM model does not support image/vision inputs."""
 
 # ── LLM trace helpers ──────────────────────────────────────────────────────────
 # Every LLM call writes one JSON line to logs/llm_trace.jsonl via the dedicated
@@ -324,6 +329,53 @@ class LLMClient:
                 error=error,
             )
             raise
+
+    async def vision_chat(
+        self,
+        system_prompt: str,
+        user_text: str,
+        images: list[tuple[bytes, str]],
+        max_tokens: int = 4096,
+    ) -> str:
+        """
+        Single-turn chat with image inputs.
+        images: list of (raw_bytes, media_type), e.g. (b"...", "image/jpeg").
+        Raises VisionNotSupportedError if the model rejects image content.
+        """
+        t0 = time.monotonic()
+        error: str | None = None
+        result = ""
+        try:
+            if self.provider == "anthropic":
+                result = await self._vision_chat_anthropic(system_prompt, user_text, images, max_tokens)
+            else:
+                result = await self._vision_chat_openai(system_prompt, user_text, images, max_tokens)
+            return result
+        except VisionNotSupportedError:
+            raise
+        except Exception as exc:
+            error = str(exc)
+            err_lower = error.lower()
+            # Detect vision-not-supported errors from various providers
+            vision_keywords = ["image", "vision", "multimodal", "unsupported media type",
+                               "invalid content", "does not support", "cannot process"]
+            if any(kw in err_lower for kw in vision_keywords):
+                raise VisionNotSupportedError(
+                    "当前配置的模型不支持图片输入，请在设置中切换到支持视觉的模型（如 gpt-4o 或 claude-3.5-sonnet）"
+                ) from exc
+            raise
+        finally:
+            trace_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"[{len(images)} image(s)] {user_text}"},
+            ]
+            _write_trace(
+                method="vision_chat",
+                messages=trace_messages,
+                output=result,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                error=error,
+            )
 
     # ── OpenAI implementations ──────────────────────────────────────────────
 
@@ -810,3 +862,55 @@ class LLMClient:
             if hasattr(block, "text"):
                 full_text += block.text
         return full_text
+
+    async def _vision_chat_openai(
+        self,
+        system_prompt: str,
+        user_text: str,
+        images: list[tuple[bytes, str]],
+        max_tokens: int,
+    ) -> str:
+        image_blocks = [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mt};base64,{base64.b64encode(img).decode()}"},
+            }
+            for img, mt in images
+        ]
+        content: list[dict] = [{"type": "text", "text": user_text}, *image_blocks]
+        response = await self._get_client().chat.completions.create(
+            model=settings.LLM_MODEL,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+    async def _vision_chat_anthropic(
+        self,
+        system_prompt: str,
+        user_text: str,
+        images: list[tuple[bytes, str]],
+        max_tokens: int,
+    ) -> str:
+        image_blocks = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mt,
+                    "data": base64.b64encode(img).decode(),
+                },
+            }
+            for img, mt in images
+        ]
+        content: list[dict] = [*image_blocks, {"type": "text", "text": user_text}]
+        response = await self._get_client().messages.create(
+            model=settings.LLM_MODEL,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": content}],
+        )
+        return response.content[0].text

@@ -42,6 +42,7 @@
 - **Coordinator Agent (CA)**：自然语言对话，自动解析 JD、编排后续任务，无需填写结构化表单
 - **Research Agent (RA)**：自动行业调研，生成 Markdown 报告 + 技能图谱（Ontology）
 - **Evaluator Agent (EA)**：多维度候选人评分与项目匹配
+- **Talent Agent (TA)**：多格式候选人录入（图片截图 / PDF / Word / 文字粘贴），AI 解析结构化信息，写入前查重提醒，支持覆盖或跳过
 - **Chrome 插件**：在招聘平台页面一键采集候选人简历到本地人才池
 - **支持 OpenAI / Anthropic**：通过 `LLM_PROVIDER` 切换（目前仅测试了 OpenAI SDK）
 - **Tauri 打包**：跨平台桌面应用，macOS 输出 `.app` / `.dmg`

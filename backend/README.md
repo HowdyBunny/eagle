@@ -165,6 +165,22 @@ uv run alembic revision --autogenerate -m "description"  # 生成新迁移
 | **Coordinator Agent (CA)** | `app/agents/coordinator.py` | 对话层 + 编排层，使用 LLM tool use 循环 |
 | **Research Agent (RA)** | `app/agents/research.py` | 行业调研，使用 LLM 内置 web_search 能力 |
 | **Evaluator Agent (EA)** | `app/agents/evaluator.py` | 候选人多维度评分 |
+| **Talent Agent (TA)** | `app/agents/talent.py` | 候选人录入：图片/PDF/Word/文字解析、查重检测、批量写库 |
+
+### Talent Agent (TA) — 端点说明
+
+TA 通过 `/api/talent/` 前缀对外暴露，与 CA/RA/EA 平级，直接服务前端用户操作，不经过 CA 编排。
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/talent/parse-images` | POST | 上传图片截图（multipart），Vision LLM 解析候选人信息。`batch_mode=true` 时每张图视为独立候选人 |
+| `/api/talent/parse-document` | POST | 上传 PDF 或 Word 文件，服务端提取文字后由 LLM 结构化 |
+| `/api/talent/parse-text` | POST | 提交纯文字（如从微信复制的简历），由 LLM 结构化 |
+| `/api/talent/confirm-import` | POST | 前端确认后批量写入人才库，支持 `create` / `overwrite` / `skip` 三种操作 |
+
+**查重逻辑优先级**：手机号精确匹配 → 邮箱精确匹配 → 姓名 + 公司模糊匹配。
+
+**视觉模型兼容**：图片解析要求 LLM 支持 Vision 能力（如 `gpt-4o`、`claude-3.5-sonnet`）。若模型不支持，TA 返回用户可读的错误信息而非抛出异常。PDF/Word/文字模式不需要 Vision 能力，使用常规文字 LLM 即可。
 
 ## 日志
 

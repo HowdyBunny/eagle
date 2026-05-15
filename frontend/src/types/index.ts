@@ -6,3 +6,4 @@ export type { ConversationRole, ChatRequest, ChatResponse, ConversationLogRespon
 export type { OntologyResponse } from './ontology'
 export type { ResearchTriggerRequest, ResearchResponse } from './research'
 export type { PreferenceCreate, PreferenceResponse } from './preference'
+export type { ParsedCandidateData, DuplicateConflict, ParseResult, ParseResponse, ConfirmCandidateItem, ConfirmImportRequest, ConfirmImportResponse } from './talent'

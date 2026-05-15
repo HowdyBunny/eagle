@@ -42,12 +42,18 @@ async def lifespan(app: FastAPI):
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Warm up LanceDB (creates tables if they don't exist)
+    # Validate LanceDB schemas — drops tables whose vector dim doesn't match
+    # EMBEDDING_DIMENSIONS (e.g. after switching embedding models or changing the setting).
+    # Must run before get_*_table() so mismatched tables are dropped first.
     from app.services.lancedb_service import (
         get_candidate_table,
         get_industry_table,
         get_requirement_table,
+        validate_schemas,
     )
+    validate_schemas()
+
+    # Warm up LanceDB (creates tables if they don't exist yet)
     get_candidate_table()
     get_industry_table()
     get_requirement_table()

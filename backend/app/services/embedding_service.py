@@ -7,7 +7,8 @@ from app.services.lancedb_service import (
     get_candidate_table,
     get_industry_table,
     get_requirement_table,
-    upsert_row,
+    table_add_async,
+    upsert_row_async,
 )
 from app.utils.logger import logger
 
@@ -30,7 +31,7 @@ class EmbeddingService:
     async def embed_candidate(self, candidate_id: uuid.UUID, experience_summary: str) -> None:
         try:
             embedding = await self.get_embedding(experience_summary)
-            upsert_row(
+            await upsert_row_async(
                 get_candidate_table(),
                 {
                     "id": str(candidate_id),
@@ -46,7 +47,7 @@ class EmbeddingService:
     async def embed_requirement(self, project_id: uuid.UUID, requirement_text: str) -> None:
         try:
             embedding = await self.get_embedding(requirement_text)
-            upsert_row(
+            await upsert_row_async(
                 get_requirement_table(),
                 {
                     "id": str(project_id),
@@ -67,7 +68,8 @@ class EmbeddingService:
         try:
             chunk_id = str(uuid.uuid4())
             embedding = await self.get_embedding(content_text)
-            get_industry_table().add(
+            await table_add_async(
+                get_industry_table(),
                 [
                     {
                         "id": chunk_id,
@@ -76,7 +78,7 @@ class EmbeddingService:
                         "source_ontology_id": str(ontology_id),
                         "embedding_model_version": settings.EMBEDDING_MODEL,
                     }
-                ]
+                ],
             )
             logger.info(f"Embedded industry knowledge chunk for ontology {ontology_id}")
             return {"chunk_id": chunk_id, "source_ontology_id": str(ontology_id), "content_text": content_text}

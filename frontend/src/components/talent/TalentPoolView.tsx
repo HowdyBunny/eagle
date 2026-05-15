@@ -9,6 +9,19 @@ import CandidateDetailSheet from './CandidateDetailSheet'
 import AddCandidateDialog from './AddCandidateDialog'
 import type { CandidateResponse } from '@/types'
 
+function computeCompleteness(c: CandidateResponse): number {
+  let s = 0
+  if (c.full_name) s += 20
+  if (c.phone || c.email) s += 20
+  if (c.current_title) s += 10
+  if (c.current_company) s += 10
+  if (c.years_experience != null) s += 10
+  if (c.experience_summary) s += 15
+  if (c.education) s += 10
+  if (c.location) s += 5
+  return s
+}
+
 export default function TalentPoolView() {
   const {
     candidates, searchResults, isSearchMode, loading,
@@ -172,7 +185,7 @@ export default function TalentPoolView() {
           <table className="w-full">
             <thead>
               <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                {['候选人', '职位 / 公司', '经验', '地点', '置信度', '来源', '操作'].map((h) => (
+                {['候选人', '职位 / 公司', '经验', '地点', '时效 / 完整', '来源', '操作'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[10px] font-extrabold uppercase tracking-widest text-secondary">
                     {h}
                   </th>
@@ -207,18 +220,31 @@ export default function TalentPoolView() {
                   </td>
                   {/* Location */}
                   <td className="px-4 py-3 text-sm text-secondary">{c.location ?? '—'}</td>
-                  {/* Confidence */}
+                  {/* 时效 + 完整度 */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 rounded-full bg-surface-container">
-                        <div
-                          className={`h-full rounded-full ${(c.confidence_score ?? 0) >= 60 ? 'bg-primary' : 'bg-red-400'}`}
-                          style={{ width: `${Math.max(0, Math.min(100, c.confidence_score ?? 0))}%` }}
-                        />
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-14 h-1 rounded-full bg-surface-container shrink-0">
+                          <div
+                            className={`h-full rounded-full ${(c.confidence_score ?? 0) >= 60 ? 'bg-primary' : 'bg-red-400'}`}
+                            style={{ width: `${Math.max(0, Math.min(100, c.confidence_score ?? 0))}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-bold ${(c.confidence_score ?? 0) < 60 ? 'text-red-500' : 'text-secondary'}`}>
+                          {Math.round(c.confidence_score ?? 0)}
+                        </span>
                       </div>
-                      <span className={`text-[11px] font-bold ${(c.confidence_score ?? 0) < 60 ? 'text-red-500' : 'text-secondary'}`}>
-                        {Math.round(c.confidence_score ?? 0)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-14 h-1 rounded-full bg-surface-container shrink-0">
+                          <div
+                            className="h-full rounded-full bg-emerald-500"
+                            style={{ width: `${computeCompleteness(c)}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold text-secondary">
+                          {computeCompleteness(c)}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   {/* Source */}
