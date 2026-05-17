@@ -3,13 +3,14 @@ Unified LLM client — routes to OpenAI SDK or Anthropic SDK based on LLM_PROVID
 
   LLM_PROVIDER=openai (default)
     - chat/agentic_loop: client.chat.completions.create  (OpenAI function-calling)
-    - research_chat:     client.responses.create         (OpenAI Responses API + web_search)
     - LLM_BASE_URL must include /v1
 
   LLM_PROVIDER=anthropic
     - chat/agentic_loop: client.messages.create          (Anthropic tool_use)
-    - research_chat:     client.messages.create          (with web_search_20260209 built-in)
     - LLM_BASE_URL must NOT include /v1
+
+Web search for the Research Agent is handled outside this client via
+app.services.tavily_service — see app.agents.research for the orchestration.
 """
 
 import base64
@@ -144,8 +145,8 @@ class LLMClient:
 
         timeout: total seconds before the request is abandoned.
           - agentic_loop / simple_chat use the default (180s).
-          - research_chat passes a longer timeout because RA does multiple web
-            searches and generates a large JSON report; some models need 2-3 min.
+          - RA's synthesize step passes a longer timeout because it generates
+            a large JSON report; some models need 2-3 min.
         """
         if self.provider == "anthropic":
             import anthropic
@@ -219,45 +220,6 @@ class LLMClient:
         finally:
             _write_trace(
                 method="simple_chat",
-                messages=messages,
-                output=result,
-                duration_ms=int((time.monotonic() - t0) * 1000),
-                error=error,
-            )
-
-    async def research_chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
-        """
-        Text completion with web search enabled. Routing is driven by
-        WEB_SEARCH_STRATEGY (independent of LLM_PROVIDER / SDK choice):
-
-          "openai_responses"  → OpenAI Responses API + web_search tool (official OpenAI only)
-          "anthropic_builtin" → Anthropic messages + web_search_20260209 built-in tool
-          "extra_body"        → chat.completions + WEB_SEARCH_EXTRA_BODY JSON (e.g. Qwen)
-          "openai_tool"       → chat.completions + non-standard tool type (e.g. Mimo)
-          "none"              → no live search; falls back to simple_chat
-        """
-        t0 = time.monotonic()
-        error: str | None = None
-        result = ""
-        strategy = settings.WEB_SEARCH_STRATEGY.lower()
-        try:
-            if strategy == "anthropic_builtin":
-                result = await self._research_chat_anthropic(messages, max_tokens)
-            elif strategy == "extra_body":
-                result = await self._research_chat_extra_body(messages, max_tokens)
-            elif strategy == "openai_tool":
-                result = await self._research_chat_openai_tool(messages, max_tokens)
-            elif strategy == "none":
-                result = await self._simple_chat_openai(messages, max_tokens)
-            else:  # "openai_responses" (default)
-                result = await self._research_chat_openai(messages, max_tokens)
-            return result
-        except Exception as exc:
-            error = str(exc)
-            raise
-        finally:
-            _write_trace(
-                method="research_chat",
                 messages=messages,
                 output=result,
                 duration_ms=int((time.monotonic() - t0) * 1000),
@@ -620,57 +582,6 @@ class LLMClient:
                     yield {"type": "error", "message": f"流异常终止（{finish_reason}），请重试。"}
                     return
 
-    async def _research_chat_openai(self, messages: list[dict], max_tokens: int) -> str:
-        # Responses API requires string input (verified with geekai.co proxy).
-        # Passing a messages list causes "Missing required parameter: 'input'" on some proxies.
-        # Concatenate system instructions + user prompt into a single string.
-        parts = [m["content"] for m in messages if m.get("content")]
-        combined_input = "\n\n---\n\n".join(parts)
-        response = await self._get_client(timeout=300.0).responses.create(
-            model=settings.LLM_MODEL,
-            input=combined_input,
-            tools=[{
-                "type": "web_search",
-                "search_context_size": settings.WEB_SEARCH_CONTEXT_SIZE,
-            }],
-        )
-        return response.output_text
-
-    async def _research_chat_extra_body(self, messages: list[dict], max_tokens: int) -> str:
-        """
-        Web search via extra_body params on chat.completions (e.g. Qwen enable_search).
-        WEB_SEARCH_EXTRA_BODY is a JSON string like '{"enable_search": true}'.
-        """
-        extra: dict = {}
-        if settings.WEB_SEARCH_EXTRA_BODY:
-            try:
-                extra = json.loads(settings.WEB_SEARCH_EXTRA_BODY)
-            except json.JSONDecodeError:
-                logger.warning("WEB_SEARCH_EXTRA_BODY is not valid JSON — ignoring")
-        response = await self._get_client(timeout=300.0).chat.completions.create(
-            model=settings.LLM_MODEL,
-            max_tokens=max_tokens,
-            messages=messages,
-            extra_body=extra if extra else None,
-        )
-        return response.choices[0].message.content or ""
-
-    async def _research_chat_openai_tool(self, messages: list[dict], max_tokens: int) -> str:
-        """
-        Web search via a non-standard tool type on chat.completions (e.g. Mimo web_search).
-        Passed through extra_body to bypass OpenAI SDK's tool-type validation.
-        """
-        response = await self._get_client(timeout=300.0).chat.completions.create(
-            model=settings.LLM_MODEL,
-            max_tokens=max_tokens,
-            messages=messages,
-            extra_body={
-                "tools": [{"type": "web_search", "max_keyword": 5, "force_search": True}],
-                "tool_choice": "auto",
-            },
-        )
-        return response.choices[0].message.content or ""
-
     # ── Anthropic implementations ───────────────────────────────────────────
 
     async def _agentic_loop_stream_anthropic(
@@ -847,21 +758,6 @@ class LLMClient:
             messages=msgs,
         )
         return response.content[0].text
-
-    async def _research_chat_anthropic(self, messages: list[dict], max_tokens: int) -> str:
-        system, msgs = _extract_system(messages)
-        response = await self._get_client(timeout=300.0).messages.create(
-            model=settings.LLM_MODEL,
-            max_tokens=max_tokens,
-            system=system,
-            messages=msgs,
-            tools=[{"type": "web_search_20260209", "name": "web_search"}],
-        )
-        full_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                full_text += block.text
-        return full_text
 
     async def _vision_chat_openai(
         self,

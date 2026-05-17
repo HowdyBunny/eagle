@@ -3,8 +3,6 @@ import { persist } from 'zustand/middleware'
 import type { ProjectResponse } from '@/types'
 
 export type LLMProvider = 'openai' | 'anthropic'
-export type WebSearchStrategy = 'openai_responses' | 'anthropic_builtin' | 'extra_body' | 'openai_tool' | 'none'
-export type WebSearchContextSize = 'low' | 'medium' | 'high'
 export type VendorPresetId = 'openai' | 'anthropic' | 'qwen' | 'glm' | 'mimo' | 'custom'
 
 export interface SettingsState {
@@ -14,9 +12,8 @@ export interface SettingsState {
   llmApiKey: string
   llmModel: string
   llmBaseUrl: string
-  webSearchStrategy: WebSearchStrategy
-  webSearchExtraBody: string
-  webSearchContextSize: WebSearchContextSize
+  // Tavily web search (used by Research Agent)
+  tavilyApiKey: string
   // Embedding config
   embeddingApiKey: string
   embeddingModel: string
@@ -44,9 +41,7 @@ export const useAppStore = create<AppState>()(
       llmApiKey: '',
       llmModel: 'gpt-5.2',
       llmBaseUrl: 'https://api.openai.com/v1',
-      webSearchStrategy: 'openai_responses' as WebSearchStrategy,
-      webSearchExtraBody: '',
-      webSearchContextSize: 'low',
+      tavilyApiKey: '',
       embeddingApiKey: '',
       embeddingModel: 'text-embedding-3-small',
       embeddingDimensions: 1536,

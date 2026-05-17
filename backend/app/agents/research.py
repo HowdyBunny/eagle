@@ -1,15 +1,16 @@
 """
 Research Agent (RA)
 
-Researches industry knowledge using LLM with web search.
+Researches industry knowledge using LLM + Tavily web search.
 Produces three outputs:
 1. Markdown report (saved to file, path stored in project_research)
 2. Structured ontology JSON (saved to skill_ontology table)
 3. Semantic knowledge chunks (embedded and stored in industry_knowledge table)
 
-Web search behavior:
-  LLM_PROVIDER=openai  → OpenAI Responses API with web_search tool (real-time)
-  LLM_PROVIDER=anthropic → Anthropic built-in web_search_20250305 tool (real-time)
+Architecture: Plan → Search → Synthesize
+  1. Plan:       LLM emits a list of search queries for the topic.
+  2. Search:     Tavily runs all queries in parallel (auto_parameters=True).
+  3. Synthesize: LLM produces the final structured JSON using the search results.
 """
 
 import json
@@ -19,24 +20,42 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.project_research import ProjectResearch
 from app.services import ontology_service, project_service, research_service
 from app.services.research_service import complete_research_task, fail_research_task
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_client import LLMClient
+from app.services import tavily_service
 from app.utils.logger import logger
 from app.utils.paths import eagle_dir
+
+# Plan step: ask the LLM to emit a JSON list of search queries.
+RA_PLAN_PROMPT = """你是 Eagle 系统 Research Agent 的"查询规划者"。
+给定一个调研主题，你需要输出一组覆盖不同角度的网络搜索查询，由系统提交给搜索引擎执行。
+
+## 要求
+- 每个 query 应该 5-25 个字，**具体、可搜**（避免空泛的"……是什么"）
+- 覆盖维度：核心技术/产品、关键岗位/职责、行业术语与黑话、市场格局与代表公司、最新动态
+- 数量：5-{max_queries} 条；不要超过 {max_queries} 条
+- 用中文或英文均可，按主题语言决定
+
+## 输出格式
+只输出一个 JSON 对象，不要任何前后缀、markdown 包裹、解释文字：
+{{"queries": ["query1", "query2", ...]}}
+"""
+
 
 # TODO: Tune this research prompt through testing with different industries
 RA_SYSTEM_PROMPT = """你是 Eagle 系统的 Research Agent（调研者，RA），专门为猎头研究行业知识。负责为猎头调研行业知识。你的输出将被系统解析并存入知识库，因此必须严格按照指定的JSON格式输出。
 
 ## 任务
-针对给定的行业或技术方向进行深度调研，使用web_search工具搜索最新信息，然后输出一个严格的JSON对象。
+针对给定的行业或技术方向进行深度调研。用户消息中会附带网络搜索结果（来自 Tavily），你需要基于这些搜索结果整理输出一个严格的 JSON 对象。
 
 ## 调研要求
-- 使用web_search搜索至少8个不同角度的关键词，确保信息全面
+- 所有内容必须基于提供的搜索结果，不要编造不存在的技术或岗位
+- 如果搜索结果中信息不全，可以用模型已有的可靠知识补充，但优先采用搜索结果
 - 关注：核心技术栈、关键岗位、行业术语/黑话、技能之间的关联关系
-- 所有内容必须基于搜索结果，不要编造不存在的技术或岗位
 - 技能图谱要体现岗位之间的差异，不要所有岗位都列相同的技能
 
 
@@ -108,6 +127,31 @@ RA_SYSTEM_PROMPT = """你是 Eagle 系统的 Research Agent（调研者，RA）�
 """
 
 
+def _extract_queries(text: str) -> list[str]:
+    """
+    Parse `{"queries": [...]}` out of the planning LLM's reply.
+
+    Tolerates ```json fences and surrounding chatter — locates the first
+    `{` ... `}` block and tries to load it.
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        s = s.split("```", 2)[1]
+        if s.startswith("json"):
+            s = s[4:]
+        s = s.rsplit("```", 1)[0]
+    start = s.find("{")
+    end = s.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return []
+    try:
+        data = json.loads(s[start : end + 1])
+    except json.JSONDecodeError:
+        return []
+    raw = data.get("queries") or []
+    return [str(q).strip() for q in raw if isinstance(q, (str, int, float)) and str(q).strip()]
+
+
 class ResearchAgent:
     def __init__(self, db: AsyncSession):
         self.llm = LLMClient()
@@ -123,15 +167,32 @@ class ResearchAgent:
     ) -> ProjectResearch:
         logger.info(f"RA starting research on '{topic}' for project {project_id}")
 
-        prompt = f"请调研：{topic}"
-        if additional_context:
-            prompt += f"\n\n额外背景：{additional_context}"
-
         try:
-            full_text = await self.llm.research_chat([
-                {"role": "system", "content": RA_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ])
+            # 1. Plan — let the LLM decide which queries to run.
+            queries = await self._plan_queries(topic, additional_context)
+            logger.info(f"RA planned {len(queries)} queries for '{topic}': {queries}")
+
+            # 2. Search — fan out to Tavily in parallel.
+            search_responses = await tavily_service.search_many(queries)
+            search_blob = tavily_service.format_results_for_llm(search_responses)
+            logger.info(
+                f"RA collected {sum(len(r.get('results') or []) for r in search_responses)} "
+                f"results across {len(search_responses)} queries"
+            )
+
+            # 3. Synthesize — LLM produces the final structured JSON.
+            user_prompt = f"请基于以下网络搜索结果调研：{topic}"
+            if additional_context:
+                user_prompt += f"\n\n额外背景：{additional_context}"
+            user_prompt += f"\n\n## 网络搜索结果（Tavily）\n\n{search_blob}"
+
+            full_text = await self.llm.simple_chat(
+                [
+                    {"role": "system", "content": RA_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=8192,
+            )
 
             # Parse outputs
             markdown_report, ontology_data, knowledge_chunks = self._parse_response(full_text, topic)
@@ -174,6 +235,32 @@ class ResearchAgent:
                 except Exception:
                     logger.exception("RA: failed to update task status to FAILED")
             raise
+
+    async def _plan_queries(self, topic: str, additional_context: str | None) -> list[str]:
+        """
+        Ask the LLM for a list of search queries. Falls back to a single
+        topic-as-query if the LLM output cannot be parsed — the synthesize
+        step then still gets at least one search blob.
+        """
+        max_q = settings.TAVILY_MAX_QUERIES
+        system_prompt = RA_PLAN_PROMPT.format(max_queries=max_q)
+        user_prompt = f"调研主题：{topic}"
+        if additional_context:
+            user_prompt += f"\n额外背景：{additional_context}"
+
+        raw = await self.llm.simple_chat(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=1024,
+        )
+
+        queries = _extract_queries(raw)
+        if not queries:
+            logger.warning(f"RA: plan step returned no usable queries, falling back to topic. raw={raw[:200]!r}")
+            return [topic]
+        return queries[:max_q]
 
     def _parse_response(self, full_text: str, topic: str) -> tuple[str, dict, list[str]]:
         default_ontology = {

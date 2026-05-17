@@ -20,6 +20,7 @@ dependencies = [
     "python-multipart>=0.0.28",
     "send2trash>=2.1.0",
     "sqlalchemy[asyncio]>=2.0.48",
+    "tavily-python>=0.7.24",
     "tqdm>=4.67.3",
     "uvicorn[standard]>=0.42.0",
 ]

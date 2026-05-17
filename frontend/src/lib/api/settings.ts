@@ -5,9 +5,7 @@ export interface RuntimeSettingsUpdate {
   llm_api_key?: string
   llm_model?: string
   llm_base_url?: string
-  web_search_strategy?: string
-  web_search_extra_body?: string
-  web_search_context_size?: string
+  tavily_api_key?: string
   embedding_api_key?: string
   embedding_model?: string
   embedding_base_url?: string
@@ -15,13 +13,13 @@ export interface RuntimeSettingsUpdate {
 }
 
 // API keys are intentionally excluded from the response for security.
+// `tavily_configured` indicates whether a non-empty TAVILY_API_KEY is set
+// on the backend, without exposing the key itself.
 export interface RuntimeSettingsResponse {
   llm_provider: string
   llm_model: string
   llm_base_url: string | null
-  web_search_strategy: string
-  web_search_extra_body: string | null
-  web_search_context_size: string
+  tavily_configured: boolean
   embedding_model: string
   embedding_base_url: string | null
   embedding_dimensions: number

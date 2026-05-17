@@ -1,14 +1,16 @@
 import { useState, type ReactNode } from 'react'
-import { Eye, EyeOff, Sparkles, Database, Server, HelpCircle, Save, RotateCcw, FolderOpen, ChevronDown, ChevronUp } from 'lucide-react'
+import { Eye, EyeOff, Sparkles, Database, Server, Globe, HelpCircle, Save, RotateCcw, FolderOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAppStore, type SettingsState, type VendorPresetId, type LLMProvider, type WebSearchStrategy } from '@/stores/app-store'
+import { useAppStore, type SettingsState, type VendorPresetId, type LLMProvider } from '@/stores/app-store'
 import { updateRuntimeSettings } from '@/lib/api/settings'
 import { cn } from '@/lib/utils'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Vendor preset definitions
 // ────────────────────────────────────────────────────────────────────────────
+// Web search is now uniformly handled via Tavily (see Tavily section below),
+// so vendor presets only carry SDK / Base URL / default model info.
 
 interface VendorPreset {
   id: VendorPresetId
@@ -17,10 +19,6 @@ interface VendorPreset {
   provider: LLMProvider
   baseUrl: string
   defaultModel: string
-  webSearchStrategy: WebSearchStrategy
-  webSearchExtraBody: string
-  webSearchOk: boolean
-  webSearchNote: string
   isCustom?: boolean
 }
 
@@ -32,10 +30,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'openai',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-5.2',
-    webSearchStrategy: 'openai_responses',
-    webSearchExtraBody: '',
-    webSearchOk: true,
-    webSearchNote: 'Responses API',
   },
   {
     id: 'anthropic',
@@ -44,10 +38,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'anthropic',
     baseUrl: '',
     defaultModel: 'claude-sonnet-4-6',
-    webSearchStrategy: 'anthropic_builtin',
-    webSearchExtraBody: '',
-    webSearchOk: true,
-    webSearchNote: '内置搜索工具',
   },
   {
     id: 'qwen',
@@ -56,10 +46,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'openai',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     defaultModel: 'qwen3.6-plus',
-    webSearchStrategy: 'extra_body',
-    webSearchExtraBody: '{"enable_search": true}',
-    webSearchOk: true,
-    webSearchNote: 'enable_search',
   },
   {
     id: 'glm',
@@ -68,10 +54,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4/',
     defaultModel: 'glm-5.1',
-    webSearchStrategy: 'none',
-    webSearchExtraBody: '',
-    webSearchOk: false,
-    webSearchNote: '联网待确认',
   },
   {
     id: 'mimo',
@@ -80,10 +62,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'openai',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     defaultModel: 'mimo-v2-pro',
-    webSearchStrategy: 'openai_tool',
-    webSearchExtraBody: '',
-    webSearchOk: true,
-    webSearchNote: 'web_search tool',
   },
   {
     id: 'custom',
@@ -92,10 +70,6 @@ const VENDOR_PRESETS: VendorPreset[] = [
     provider: 'openai',
     baseUrl: '',
     defaultModel: '',
-    webSearchStrategy: 'none',
-    webSearchExtraBody: '',
-    webSearchOk: false,
-    webSearchNote: '无内置联网',
     isCustom: true,
   },
 ]
@@ -268,11 +242,6 @@ function PresetCard({
         {preset.label}
       </span>
       <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">{preset.region}</span>
-      {preset.webSearchOk ? (
-        <span className="text-[9px] text-green-600 font-medium">联网 ✓</span>
-      ) : (
-        <span className="text-[9px] text-secondary">联网 —</span>
-      )}
     </button>
   )
 }
@@ -292,9 +261,6 @@ export default function SettingsView() {
     llmApiKey: store.llmApiKey,
     llmModel: store.llmModel,
     llmBaseUrl: store.llmBaseUrl,
-    webSearchStrategy: store.webSearchStrategy,
-    webSearchExtraBody: store.webSearchExtraBody,
-    webSearchContextSize: store.webSearchContextSize,
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -307,10 +273,11 @@ export default function SettingsView() {
       llmProvider: preset.provider,
       llmBaseUrl: preset.baseUrl,
       llmModel: preset.defaultModel,
-      webSearchStrategy: preset.webSearchStrategy,
-      webSearchExtraBody: preset.webSearchExtraBody,
     }))
   }
+
+  // ── Tavily draft state ───────────────────────────────────────────────────
+  const [tav, setTav] = useState({ tavilyApiKey: store.tavilyApiKey })
 
   // ── Embedding draft state ────────────────────────────────────────────────
   const [emb, setEmb] = useState({
@@ -323,7 +290,7 @@ export default function SettingsView() {
 
   const [saving, setSaving] = useState<string | null>(null)
   const [status, setStatus] = useState<Record<string, 'idle' | 'ok' | 'error'>>({
-    llm: 'idle', emb: 'idle', sys: 'idle',
+    llm: 'idle', tav: 'idle', emb: 'idle', sys: 'idle',
   })
 
   const flashStatus = (key: string, s: 'ok' | 'error') => {
@@ -356,11 +323,11 @@ export default function SettingsView() {
             subtitle="Coordinator / Research / Evaluator Agent 共用"
             tooltip={
               <div className="space-y-1.5">
-                <p>选择模型厂商后，Base URL 和联网策略会自动填充。</p>
+                <p>选择模型厂商后，Base URL 会自动填充。</p>
                 <p><strong>API Key</strong>：对应厂商的调用密钥。</p>
                 <p><strong>Model</strong>：模型名称，可在预填值基础上修改。</p>
                 <p><strong>Base URL</strong>：官方端点已预填，第三方中转需自行填入（需含 /v1）。</p>
-                <p className="text-primary pt-1">💡 LLM 和 Embedding 可以复用同一 API Key。</p>
+                <p className="text-primary pt-1">💡 Research Agent 的联网搜索由下方 Tavily 统一处理，不再依赖厂商内置。</p>
               </div>
             }
             saving={saving === 'llm'}
@@ -371,9 +338,6 @@ export default function SettingsView() {
                 llm_api_key: llm.llmApiKey,
                 llm_model: llm.llmModel,
                 llm_base_url: llm.llmBaseUrl || undefined,
-                web_search_strategy: llm.webSearchStrategy,
-                web_search_extra_body: llm.webSearchExtraBody || undefined,
-                web_search_context_size: llm.webSearchContextSize,
               })
             })}
           >
@@ -390,22 +354,6 @@ export default function SettingsView() {
                 ))}
               </div>
             </Field>
-
-            {/* ── Web search status badge ── */}
-            <div className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium',
-              selectedPreset.webSearchOk
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : 'bg-surface-container text-secondary border border-outline-variant/20',
-            )}>
-              <span>{selectedPreset.webSearchOk ? '✓' : '—'}</span>
-              <span>
-                Research Agent 联网：
-                {selectedPreset.webSearchOk
-                  ? `实时联网搜索（${selectedPreset.webSearchNote}）`
-                  : `不联网，使用模型自身知识（${selectedPreset.webSearchNote}）`}
-              </span>
-            </div>
 
             {/* ── Core fields ── */}
             <Field label="API Key">
@@ -454,36 +402,6 @@ export default function SettingsView() {
 
             {showAdvanced && (
               <div className="space-y-4 pt-1 border-t border-outline-variant/10">
-                {llm.webSearchStrategy === 'extra_body' && (
-                  <Field
-                    label="Web Search Extra Body"
-                    hint="JSON 格式，作为 extra_body 传入 chat.completions（Qwen 已预填）"
-                  >
-                    <input
-                      value={llm.webSearchExtraBody}
-                      onChange={(e) => setLlm({ ...llm, webSearchExtraBody: e.target.value })}
-                      placeholder='{"enable_search": true}'
-                      className={monoInputClass}
-                    />
-                  </Field>
-                )}
-                {llm.webSearchStrategy === 'openai_responses' && (
-                  <Field label="Web Search Context Size" hint="仅 OpenAI Responses API 生效">
-                    <Select
-                      value={llm.webSearchContextSize}
-                      onValueChange={(v) => setLlm({ ...llm, webSearchContextSize: v as 'low' | 'medium' | 'high' })}
-                    >
-                      <SelectTrigger className={selectTriggerClass}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">low</SelectItem>
-                        <SelectItem value="medium">medium</SelectItem>
-                        <SelectItem value="high">high</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                )}
                 <Field label="SDK Provider" hint="通常无需修改，由厂商选择自动决定">
                   <Select
                     value={llm.llmProvider}
@@ -500,6 +418,33 @@ export default function SettingsView() {
                 </Field>
               </div>
             )}
+          </SettingsCard>
+
+          {/* Tavily (web search) */}
+          <SettingsCard
+            icon={<Globe size={16} className="text-primary" />}
+            title="Tavily 联网搜索"
+            subtitle="Research Agent 实时联网"
+            tooltip={
+              <div className="space-y-1.5">
+                <p>Research Agent 通过 <strong>Tavily</strong> 完成网络搜索：</p>
+                <p>1. LLM 规划多个搜索 query<br />2. Tavily 并行执行（auto_parameters）<br />3. LLM 基于结果生成报告</p>
+                <p className="text-primary pt-1">💡 没配 Tavily 时 RA 会调研失败 — 请在 <a href="https://tavily.com" target="_blank" rel="noreferrer" className="underline">tavily.com</a> 注册并获取 API Key。</p>
+              </div>
+            }
+            saving={saving === 'tav'}
+            status={status.tav}
+            onSave={() => saveSection('tav', tav, async () => {
+              await updateRuntimeSettings({ tavily_api_key: tav.tavilyApiKey })
+            })}
+          >
+            <Field label="Tavily API Key" hint="从 tavily.com 控制台获取，以 tvly- 开头">
+              <SecretInput
+                value={tav.tavilyApiKey}
+                onChange={(v) => setTav({ tavilyApiKey: v })}
+                placeholder="tvly-..."
+              />
+            </Field>
           </SettingsCard>
 
           {/* Embedding */}

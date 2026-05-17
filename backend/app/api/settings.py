@@ -26,9 +26,7 @@ class RuntimeSettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     llm_model: str | None = None
     llm_base_url: str | None = None
-    web_search_strategy: str | None = None
-    web_search_extra_body: str | None = None
-    web_search_context_size: str | None = None
+    tavily_api_key: str | None = None
     embedding_api_key: str | None = None
     embedding_model: str | None = None
     embedding_base_url: str | None = None
@@ -39,9 +37,7 @@ class RuntimeSettingsResponse(BaseModel):
     llm_provider: str
     llm_model: str
     llm_base_url: str | None
-    web_search_strategy: str
-    web_search_extra_body: str | None
-    web_search_context_size: str
+    tavily_configured: bool
     embedding_model: str
     embedding_base_url: str | None
     embedding_dimensions: int
@@ -53,9 +49,7 @@ _ENV_KEY_MAP: tuple[tuple[str, str], ...] = (
     ("llm_api_key", "LLM_API_KEY"),
     ("llm_model", "LLM_MODEL"),
     ("llm_base_url", "LLM_BASE_URL"),
-    ("web_search_strategy", "WEB_SEARCH_STRATEGY"),
-    ("web_search_extra_body", "WEB_SEARCH_EXTRA_BODY"),
-    ("web_search_context_size", "WEB_SEARCH_CONTEXT_SIZE"),
+    ("tavily_api_key", "TAVILY_API_KEY"),
     ("embedding_api_key", "EMBEDDING_API_KEY"),
     ("embedding_model", "EMBEDDING_MODEL"),
     ("embedding_base_url", "EMBEDDING_BASE_URL"),
@@ -117,12 +111,8 @@ async def update_runtime_settings(
         settings.LLM_MODEL = payload["llm_model"]
     if "llm_base_url" in payload:
         settings.LLM_BASE_URL = payload["llm_base_url"] or None
-    if "web_search_strategy" in payload:
-        settings.WEB_SEARCH_STRATEGY = payload["web_search_strategy"]
-    if "web_search_extra_body" in payload:
-        settings.WEB_SEARCH_EXTRA_BODY = payload["web_search_extra_body"] or None
-    if "web_search_context_size" in payload:
-        settings.WEB_SEARCH_CONTEXT_SIZE = payload["web_search_context_size"]
+    if "tavily_api_key" in payload:
+        settings.TAVILY_API_KEY = payload["tavily_api_key"] or None
     if "embedding_api_key" in payload:
         settings.EMBEDDING_API_KEY = payload["embedding_api_key"]
     if "embedding_model" in payload:
@@ -160,9 +150,7 @@ async def get_runtime_settings():
         llm_provider=settings.LLM_PROVIDER,
         llm_model=settings.LLM_MODEL,
         llm_base_url=settings.LLM_BASE_URL,
-        web_search_strategy=settings.WEB_SEARCH_STRATEGY,
-        web_search_extra_body=settings.WEB_SEARCH_EXTRA_BODY,
-        web_search_context_size=settings.WEB_SEARCH_CONTEXT_SIZE,
+        tavily_configured=bool(settings.TAVILY_API_KEY),
         embedding_model=settings.EMBEDDING_MODEL,
         embedding_base_url=settings.EMBEDDING_BASE_URL,
         embedding_dimensions=settings.EMBEDDING_DIMENSIONS,

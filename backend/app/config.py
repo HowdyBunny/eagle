@@ -24,20 +24,13 @@ class Settings(BaseSettings):
     # anthropic: LLM_BASE_URL must NOT include /v1 (Anthropic SDK appends it automatically)
     LLM_BASE_URL: str | None = None
 
-    # Web search strategy for Research Agent (independent of LLM_PROVIDER / SDK):
-    #   "openai_responses"  → OpenAI Responses API + web_search tool (official OpenAI only)
-    #   "anthropic_builtin" → Anthropic messages API + web_search_20260209 built-in tool
-    #   "extra_body"        → chat.completions + extra_body JSON (e.g. Qwen enable_search)
-    #   "openai_tool"       → chat.completions + non-standard tool type (e.g. Mimo web_search)
-    #   "none"              → no live search; RA falls back to model knowledge only
-    WEB_SEARCH_STRATEGY: str = "openai_responses"
-
-    # JSON string passed as extra_body when WEB_SEARCH_STRATEGY="extra_body".
-    # Qwen example: '{"enable_search": true}'
-    WEB_SEARCH_EXTRA_BODY: str | None = None
-
-    # Context size hint; only used when WEB_SEARCH_STRATEGY="openai_responses"
-    WEB_SEARCH_CONTEXT_SIZE: str = "medium"  # "low" | "medium" | "high"
+    # Web search via Tavily (https://tavily.com) — used by Research Agent.
+    # The RA plans search queries with the LLM, then fans out to Tavily in parallel.
+    # Tavily's `auto_parameters` picks search_depth/topic/max_results per query.
+    TAVILY_API_KEY: str | None = None
+    # Cap on how many queries the planning step is allowed to emit. Hard limit
+    # to control cost; the LLM is also instructed to stay under this.
+    TAVILY_MAX_QUERIES: int = 8
 
     # Embedding — any OpenAI-compatible embedding endpoint
     EMBEDDING_API_KEY: str | None = None
