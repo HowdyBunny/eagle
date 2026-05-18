@@ -8,8 +8,14 @@ export interface ResearchTriggerRequest {
 export interface ResearchResponse {
   id: string
   project_id: string
-  ontology_id: string
+  ontology_id: string | null
+  topic: string | null
   report_file_path: string | null
   created_at: string
   ontology: OntologyResponse | null
+}
+
+export interface ResearchReportContent {
+  content: string
+  path: string
 }

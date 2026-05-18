@@ -89,8 +89,14 @@ class TalentAgent:
         db: AsyncSession,
         images: list[tuple[bytes, str]],
         batch_mode: bool,
+        skip_dedup: bool = False,
     ) -> ParseResponse:
-        """Parse candidate info from one or more images via Vision LLM."""
+        """Parse candidate info from one or more images via Vision LLM.
+
+        When skip_dedup is True, returned ParseResults will have an empty
+        `conflicts` list — caller is responsible for calling check_duplicates
+        separately. This split lets the frontend show per-stage progress.
+        """
         if batch_mode:
             mode_note = (
                 "批量模式：每张截图代表不同的候选人，请为每张截图提取一份独立档案，"
@@ -119,13 +125,14 @@ class TalentAgent:
             logger.warning(f"TA parse_images error: {exc}")
             return ParseResponse(results=[], error=f"解析失败：{exc}")
 
-        return await self._build_results(db, raw)
+        return await self._build_results(db, raw, skip_dedup=skip_dedup)
 
     async def parse_text(
         self,
         db: AsyncSession,
         text: str,
         source_type: str,
+        skip_dedup: bool = False,
     ) -> ParseResponse:
         """Parse candidate info from extracted document text or raw paste."""
         labels = {"pdf": "PDF 简历", "word": "Word 简历", "text": "文字内容"}
@@ -150,7 +157,7 @@ class TalentAgent:
             logger.warning(f"TA parse_text error: {exc}")
             return ParseResponse(results=[], error=f"解析失败：{exc}")
 
-        return await self._build_results(db, raw)
+        return await self._build_results(db, raw, skip_dedup=skip_dedup)
 
     # ── Confirm and write ───────────────────────────────────────────────────
 
@@ -229,7 +236,12 @@ class TalentAgent:
 
     # ── Internal helpers ────────────────────────────────────────────────────
 
-    async def _build_results(self, db: AsyncSession, raw: str) -> ParseResponse:
+    async def _build_results(
+        self,
+        db: AsyncSession,
+        raw: str,
+        skip_dedup: bool = False,
+    ) -> ParseResponse:
         candidates_data = _parse_llm_json(raw)
         if candidates_data is None:
             logger.warning(f"TA: failed to parse LLM JSON: {raw[:300]}")
@@ -240,10 +252,18 @@ class TalentAgent:
             if not isinstance(cd, dict):
                 continue
             parsed = _to_parsed_data(cd)
-            conflicts = await self._check_duplicates(db, parsed)
+            conflicts = [] if skip_dedup else await self._check_duplicates(db, parsed)
             results.append(ParseResult(parsed_data=parsed, conflicts=conflicts))
 
         return ParseResponse(results=results)
+
+    async def check_duplicates_batch(
+        self,
+        db: AsyncSession,
+        candidates: list[ParsedCandidateData],
+    ) -> list[list[DuplicateConflict]]:
+        """Public batch dedup — called as a separate stage by the frontend."""
+        return [await self._check_duplicates(db, c) for c in candidates]
 
     async def _check_duplicates(
         self, db: AsyncSession, parsed: ParsedCandidateData

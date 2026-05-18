@@ -1,11 +1,47 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import { BarChart2, Plus, ChevronRight, BookOpen } from 'lucide-react'
 import { useAppStore } from '@/stores/app-store'
 import { useResearchStore } from '@/stores/research-store'
 import TriggerResearchDialog from './TriggerResearchDialog'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import type { OntologyResponse } from '@/types'
+
+function hasOntologyDetails(o: OntologyResponse | null | undefined): boolean {
+  if (!o) return false
+  return Boolean(
+    (o.synonyms && o.synonyms.length) ||
+    (o.tech_stack && o.tech_stack.length) ||
+    (o.prerequisites && o.prerequisites.length) ||
+    (o.key_positions && o.key_positions.length) ||
+    (o.skill_relations && Object.keys(o.skill_relations).length) ||
+    (o.jargon && Object.keys(o.jargon).length)
+  )
+}
+
+// Custom renderers so we don't need @tailwindcss/typography for prose styling.
+const markdownComponents = {
+  h1: ({ children }: any) => <h1 className="font-headline font-bold text-2xl text-on-surface mt-8 mb-4 first:mt-0">{children}</h1>,
+  h2: ({ children }: any) => <h2 className="font-headline font-bold text-xl text-on-surface mt-6 mb-3">{children}</h2>,
+  h3: ({ children }: any) => <h3 className="font-headline font-bold text-lg text-on-surface mt-5 mb-2">{children}</h3>,
+  h4: ({ children }: any) => <h4 className="font-headline font-semibold text-base text-on-surface mt-4 mb-2">{children}</h4>,
+  p: ({ children }: any) => <p className="text-sm text-on-surface leading-7 mb-3">{children}</p>,
+  ul: ({ children }: any) => <ul className="list-disc pl-6 mb-3 space-y-1 text-sm text-on-surface">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal pl-6 mb-3 space-y-1 text-sm text-on-surface">{children}</ol>,
+  li: ({ children }: any) => <li className="leading-6">{children}</li>,
+  strong: ({ children }: any) => <strong className="font-bold text-on-surface">{children}</strong>,
+  em: ({ children }: any) => <em className="italic">{children}</em>,
+  code: ({ children }: any) => <code className="px-1.5 py-0.5 rounded bg-surface-container text-xs font-mono">{children}</code>,
+  pre: ({ children }: any) => <pre className="p-4 rounded-lg bg-surface-container overflow-x-auto text-xs font-mono mb-3">{children}</pre>,
+  blockquote: ({ children }: any) => <blockquote className="border-l-4 border-primary/40 pl-4 my-3 italic text-secondary">{children}</blockquote>,
+  a: ({ href, children }: any) => <a href={href} target="_blank" rel="noreferrer" className="text-primary underline hover:opacity-70">{children}</a>,
+  hr: () => <hr className="my-6 border-outline-variant/20" />,
+  table: ({ children }: any) => <div className="overflow-x-auto mb-4"><table className="text-sm w-full border-collapse">{children}</table></div>,
+  thead: ({ children }: any) => <thead className="bg-surface-container-low">{children}</thead>,
+  th: ({ children }: any) => <th className="border border-outline-variant/30 px-3 py-2 text-left font-bold">{children}</th>,
+  td: ({ children }: any) => <td className="border border-outline-variant/20 px-3 py-2">{children}</td>,
+}
 
 function OntologyDoc({ ontology }: { ontology: OntologyResponse }) {
   return (
@@ -107,7 +143,11 @@ function OntologyDoc({ ontology }: { ontology: OntologyResponse }) {
 
 export default function ResearchView() {
   const { currentProjectId, currentProject } = useAppStore()
-  const { records, selectedRecordId, loading, isResearching, researchError, fetchRecords, selectRecord } = useResearchStore()
+  const {
+    records, selectedRecordId, loading, isResearching, researchError,
+    reportContent, reportLoadingId, reportError,
+    fetchRecords, selectRecord, fetchReport,
+  } = useResearchStore()
   const [showDialog, setShowDialog] = useState(false)
   const navigate = useNavigate()
 
@@ -116,6 +156,13 @@ export default function ResearchView() {
   }, [currentProjectId, fetchRecords])
 
   const selectedRecord = records.find((r) => r.id === selectedRecordId) ?? records[0] ?? null
+
+  // Lazy-load the markdown report whenever the selected record changes.
+  useEffect(() => {
+    if (currentProjectId && selectedRecord?.report_file_path) {
+      fetchReport(currentProjectId, selectedRecord.id)
+    }
+  }, [currentProjectId, selectedRecord?.id, selectedRecord?.report_file_path, fetchReport])
 
   if (!currentProjectId) {
     return (
@@ -201,8 +248,13 @@ export default function ResearchView() {
                       {r.ontology?.industry ?? '行业'}
                     </p>
                     <p className="text-sm font-semibold text-on-surface line-clamp-2">
-                      {r.ontology?.concept ?? '调研报告'}
+                      {r.topic ?? r.ontology?.concept ?? '调研报告'}
                     </p>
+                    {r.ontology?.concept && r.topic && r.ontology.concept !== r.topic && (
+                      <p className="text-[10px] text-secondary/70 mt-0.5 line-clamp-1">
+                        概念：{r.ontology.concept}
+                      </p>
+                    )}
                     <p className="text-[10px] text-secondary mt-0.5">
                       {new Date(r.created_at).toLocaleDateString('zh-CN')}
                     </p>
@@ -220,19 +272,60 @@ export default function ResearchView() {
         <div className="sticky top-0 z-10 glass-overlay border-b border-outline-variant/10 px-6 py-3 flex items-center gap-3">
           <BookOpen size={16} className="text-primary" />
           <span className="text-[10px] font-black uppercase tracking-widest text-secondary">
-            {selectedRecord?.ontology?.industry ?? '行业研究'} · Eagle Research Agent
+            {selectedRecord?.topic ?? selectedRecord?.ontology?.industry ?? '行业研究'} · Eagle Research Agent
           </span>
         </div>
 
         {/* Document content */}
         <div className="flex-1 overflow-y-auto px-8 py-10 bg-surface">
-          {selectedRecord?.ontology ? (
-            <OntologyDoc ontology={selectedRecord.ontology} />
-          ) : (
+          {!selectedRecord ? (
             <div className="flex flex-col items-center justify-center h-full text-center gap-4">
               <BarChart2 size={48} className="text-secondary/30" />
               <p className="font-headline font-bold text-lg text-secondary">选择左侧报告查看详情</p>
               <p className="text-sm text-secondary/60">或点击「触发调研」让 Research Agent 开始分析</p>
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto space-y-8">
+              {/* Markdown report — primary deliverable */}
+              <article className="bg-surface-container-lowest shadow-2xl rounded-2xl p-12">
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">
+                  {selectedRecord.ontology?.industry ?? '行业研究'}
+                </p>
+                <h1 className="font-headline font-black text-3xl tracking-tight text-on-surface mb-8 leading-tight">
+                  {selectedRecord.topic ?? selectedRecord.ontology?.concept ?? '调研报告'}
+                </h1>
+                {reportLoadingId === selectedRecord.id ? (
+                  <div className="flex justify-center py-12"><LoadingSpinner /></div>
+                ) : reportError && !reportContent[selectedRecord.id] ? (
+                  <p className="text-sm text-red-600">无法加载报告内容：{reportError}</p>
+                ) : reportContent[selectedRecord.id] ? (
+                  <div>
+                    <ReactMarkdown components={markdownComponents}>
+                      {reportContent[selectedRecord.id]}
+                    </ReactMarkdown>
+                  </div>
+                ) : !selectedRecord.report_file_path ? (
+                  <p className="text-sm text-secondary italic">该调研尚未生成报告文件。</p>
+                ) : null}
+                <p className="text-[11px] text-secondary/60 mt-10 pt-6 border-t border-outline-variant/10">
+                  生成时间：{new Date(selectedRecord.created_at).toLocaleString('zh-CN')}
+                </p>
+              </article>
+
+              {/* Ontology — supporting structured tags, only if present */}
+              {selectedRecord.ontology && hasOntologyDetails(selectedRecord.ontology) && (
+                <details className="bg-surface-container-lowest shadow-lg rounded-2xl group" open>
+                  <summary className="cursor-pointer px-8 py-5 flex items-center justify-between hover:bg-surface-container-low/30 rounded-t-2xl">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-secondary">
+                      提取的结构化标签
+                    </span>
+                    <ChevronRight size={14} className="text-secondary transition-transform group-open:rotate-90" />
+                  </summary>
+                  <div className="px-8 pb-8 pt-2">
+                    <OntologyDoc ontology={selectedRecord.ontology} />
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </div>

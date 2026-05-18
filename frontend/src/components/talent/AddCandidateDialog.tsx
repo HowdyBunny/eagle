@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, FileText, Image, Loader2, Type, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, Image, Type, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCandidateStore } from '@/stores/candidate-store'
 import * as talentApi from '@/lib/api/talent'
+import Stepper, { type StepDef } from '@/components/shared/Stepper'
 import type {
   ConfirmCandidateItem,
   DuplicateConflict,
@@ -75,7 +76,7 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
 
   // ── AI tab state ───────────────────────────────────────────────────────────
   type AiInputType = 'images' | 'file' | 'text'
-  type ParseStep = 'input' | 'parsing' | 'preview' | 'importing'
+  type ParseStep = 'input' | 'parsing' | 'preview' | 'importing' | 'done'
 
   const [aiInputType, setAiInputType] = useState<AiInputType>('images')
   const [batchMode, setBatchMode] = useState(false)
@@ -175,49 +176,106 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
     }
   }
 
-  // ── AI parse ──────────────────────────────────────────────────────────────
+  // ── AI parse — multi-stage with stepper signals ───────────────────────────
+  // Stage keys advance the <Stepper>. Stage count depends on input type:
+  //   file (PDF/Word):  extract → parse → dedup → (preview) → write
+  //   image / text:                parse → dedup → (preview) → write
+  type StageKey = 'extract' | 'parse' | 'dedup' | 'write'
+  const [activeStage, setActiveStage] = useState<StageKey | null>(null)
+
+  const STAGE_LABELS: Record<StageKey, string> = {
+    extract: '提取文本',
+    parse: 'AI 提取信息',
+    dedup: '检测重复',
+    write: '写入人才库',
+  }
+  const STAGE_CAPTIONS: Record<StageKey, string> = {
+    extract: '正在提取文档文字内容...',
+    parse: '正在调用 AI 分析候选人信息...',
+    dedup: '正在检测人才库中是否已存在...',
+    write: '正在写入人才库...',
+  }
+
+  // Stepper config — keys differ per input type so PDF/Word shows 4 steps
+  // while image/text shows 3 (no "extract" needed).
+  const stepperSteps: StepDef[] =
+    aiInputType === 'file'
+      ? (['extract', 'parse', 'dedup', 'write'] as StageKey[]).map((k) => ({ key: k, label: STAGE_LABELS[k] }))
+      : (['parse', 'dedup', 'write'] as StageKey[]).map((k) => ({ key: k, label: STAGE_LABELS[k] }))
+
+  const activeStepIndex =
+    activeStage !== null ? stepperSteps.findIndex((s) => s.key === activeStage) : -1
+
   const handleParse = async () => {
     setParseStep('parsing')
     setParseError(null)
+
     try {
+      // Input validation first so we don't transition the stepper if there's nothing to send
+      if (aiInputType === 'images' && pastedImages.length === 0) {
+        setParseError('请先粘贴或拖入至少一张截图')
+        setParseStep('input')
+        return
+      }
+      if (aiInputType === 'file' && !uploadedFile) {
+        setParseError('请先选择文件')
+        setParseStep('input')
+        return
+      }
+      if (aiInputType === 'text' && !pastedText.trim()) {
+        setParseError('请先粘贴文字内容')
+        setParseStep('input')
+        return
+      }
+
+      // Stage 1 (file only): extract text from PDF/Word.
+      let textForLlm: string | null = null
+      if (aiInputType === 'file' && uploadedFile) {
+        setActiveStage('extract')
+        const extracted = await talentApi.extractDoc(uploadedFile)
+        textForLlm = extracted.text
+      }
+
+      // Stage 2: AI parse (skip dedup — we run it as the next stage explicitly).
+      setActiveStage('parse')
       let response
       if (aiInputType === 'images') {
-        if (pastedImages.length === 0) {
-          setParseError('请先粘贴或拖入至少一张截图')
-          setParseStep('input')
-          return
-        }
-        response = await talentApi.parseImages(pastedImages, batchMode)
+        response = await talentApi.parseImages(pastedImages, batchMode, true)
       } else if (aiInputType === 'file') {
-        if (!uploadedFile) {
-          setParseError('请先选择文件')
-          setParseStep('input')
-          return
-        }
-        response = await talentApi.parseDocument(uploadedFile)
+        // Reuse parseText now that we already have the extracted text on the client.
+        response = await talentApi.parseText(textForLlm ?? '', true)
       } else {
-        if (!pastedText.trim()) {
-          setParseError('请先粘贴文字内容')
-          setParseStep('input')
-          return
-        }
-        response = await talentApi.parseText(pastedText)
+        response = await talentApi.parseText(pastedText, true)
       }
 
       if (response.error) {
         setParseError(response.error)
         setParseStep('input')
+        setActiveStage(null)
         return
       }
       if (response.results.length === 0) {
         setParseError('未能从内容中提取到候选人信息，请检查内容后重试')
         setParseStep('input')
+        setActiveStage(null)
         return
       }
 
+      // Stage 3: dedup check.
+      setActiveStage('dedup')
+      const parsedCandidates = response.results.map((r) => r.parsed_data)
+      const dedup = await talentApi.checkDuplicates(parsedCandidates)
+
+      // Merge dedup back into results so the rest of the dialog (preview / confirm)
+      // can keep using the existing ParseResult shape.
+      const merged = response.results.map((r, i) => ({
+        ...r,
+        conflicts: dedup.conflicts[i] ?? [],
+      }))
+
       // Default conflict actions: skip if conflict exists, otherwise create
       const defaults: typeof conflictActions = {}
-      response.results.forEach((r, i) => {
+      merged.forEach((r, i) => {
         if (r.conflicts.length > 0) {
           defaults[i] = { action: 'skip', existing_id: r.conflicts[0].existing_candidate.id }
         } else {
@@ -225,17 +283,20 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
         }
       })
       setConflictActions(defaults)
-      setParseResults(response.results)
+      setParseResults(merged)
       setParseStep('preview')
+      setActiveStage(null)
     } catch (err) {
       setParseError(`请求失败：${err}`)
       setParseStep('input')
+      setActiveStage(null)
     }
   }
 
   // ── AI confirm import ─────────────────────────────────────────────────────
   const handleConfirmImport = async () => {
     setParseStep('importing')
+    setActiveStage('write')
     const platform = sourcePlatformOf(aiInputType, fileType)
     const candidates: ConfirmCandidateItem[] = parseResults.map((r, i) => ({
       parsed_data: r.parsed_data,
@@ -246,10 +307,13 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
     try {
       const result = await talentApi.confirmImport({ candidates })
       setImportResult(result)
+      setParseStep('done')
+      setActiveStage(null)
       await fetchCandidates()
     } catch (err) {
       setParseError(`导入失败：${err}`)
       setParseStep('preview')
+      setActiveStage(null)
     }
   }
 
@@ -274,6 +338,23 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
     if (!f) return
     setUploadedFile(f)
     setFileType(f.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'word')
+  }
+
+  // ── File drag-drop (PDF / Word) ───────────────────────────────────────────
+  // MIME types from drag events are unreliable across OS/browsers, so we
+  // match on the file extension instead. Only the first valid file is taken,
+  // mirroring handleFileChange.
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const dropped = Array.from(e.dataTransfer.files)
+    const accept = dropped.find((f) => /\.(pdf|docx?|doc)$/i.test(f.name))
+    if (!accept) {
+      setParseError('请拖入 PDF 或 Word (.doc/.docx) 文件')
+      return
+    }
+    setParseError(null)
+    setUploadedFile(accept)
+    setFileType(accept.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'word')
   }
 
   // ── Conflict action setter ────────────────────────────────────────────────
@@ -440,7 +521,13 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
                   {aiInputType === 'file' && (
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="min-h-32 rounded-xl border-2 border-dashed border-outline-variant/30 bg-surface-container-low hover:border-primary/20 transition-colors cursor-pointer flex flex-col items-center justify-center gap-2 p-4"
+                      onDrop={handleFileDrop}
+                      onDragOver={(e) => e.preventDefault()}
+                      className={`min-h-32 rounded-xl border-2 border-dashed transition-colors cursor-pointer flex flex-col items-center justify-center gap-2 p-4 ${
+                        uploadedFile
+                          ? 'border-primary/30 bg-primary/[0.02]'
+                          : 'border-outline-variant/30 bg-surface-container-low hover:border-primary/20'
+                      }`}
                     >
                       <input
                         ref={fileInputRef}
@@ -453,11 +540,11 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
                       {uploadedFile ? (
                         <div className="text-center">
                           <p className="text-sm font-semibold text-on-surface">{uploadedFile.name}</p>
-                          <p className="text-[11px] text-secondary mt-0.5">点击重新选择</p>
+                          <p className="text-[11px] text-secondary mt-0.5">点击或拖拽以重新选择</p>
                         </div>
                       ) : (
                         <div className="text-center">
-                          <p className="text-sm text-secondary">点击选择 PDF 或 Word 文件</p>
+                          <p className="text-sm text-secondary">点击选择，或拖拽 PDF / Word 文件到此处</p>
                           <p className="text-[11px] text-secondary/60 mt-1">支持 .pdf / .doc / .docx</p>
                         </div>
                       )}
@@ -494,11 +581,15 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
                 </>
               )}
 
-              {/* Parsing spinner */}
+              {/* Parsing: multi-stage stepper */}
               {parseStep === 'parsing' && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <Loader2 size={32} className="text-primary animate-spin" />
-                  <p className="text-sm text-secondary">AI 正在解析候选人信息...</p>
+                <div className="px-6 py-12">
+                  <Stepper
+                    steps={stepperSteps}
+                    activeIndex={Math.max(0, activeStepIndex)}
+                    caption={activeStage ? STAGE_CAPTIONS[activeStage] : undefined}
+                    showElapsed
+                  />
                 </div>
               )}
 
@@ -647,16 +738,20 @@ export default function AddCandidateDialog({ open, onClose }: AddCandidateDialog
                 </div>
               )}
 
-              {/* Importing spinner */}
+              {/* Importing: reuse stepper with all earlier stages marked done */}
               {parseStep === 'importing' && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <Loader2 size={32} className="text-primary animate-spin" />
-                  <p className="text-sm text-secondary">正在写入人才库...</p>
+                <div className="px-6 py-12">
+                  <Stepper
+                    steps={stepperSteps}
+                    activeIndex={Math.max(0, activeStepIndex)}
+                    caption={activeStage ? STAGE_CAPTIONS[activeStage] : undefined}
+                    showElapsed
+                  />
                 </div>
               )}
 
               {/* Import result */}
-              {importResult && (
+              {parseStep === 'done' && importResult && (
                 <div className="flex flex-col items-center gap-4 py-8">
                   <CheckCircle2 size={40} className="text-emerald-500" />
                   <div className="text-center">

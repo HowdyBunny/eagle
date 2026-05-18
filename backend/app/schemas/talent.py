@@ -63,3 +63,12 @@ class ConfirmImportResponse(BaseModel):
 class ExtractDocResponse(BaseModel):
     text: str
     filename: str
+
+
+class CheckDuplicatesRequest(BaseModel):
+    candidates: list[ParsedCandidateData]
+
+
+class CheckDuplicatesResponse(BaseModel):
+    """conflicts[i] is the conflict list for candidates[i] (parallel to input order)."""
+    conflicts: list[list[DuplicateConflict]]

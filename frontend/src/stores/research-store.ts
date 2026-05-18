@@ -13,10 +13,16 @@ interface ResearchState {
   isResearching: boolean
   researchError: string | null
   error: string | null
+  // Markdown report content keyed by research record id. Cached so we don't
+  // refetch every time the user clicks between records in the same session.
+  reportContent: Record<string, string>
+  reportLoadingId: string | null
+  reportError: string | null
   fetchRecords: (projectId: string) => Promise<void>
   triggerResearch: (projectId: string, topic: string, additionalContext?: string) => Promise<void>
   retryResearch: (projectId: string, topic: string, additionalContext?: string) => Promise<void>
   selectRecord: (id: string) => void
+  fetchReport: (projectId: string, researchId: string) => Promise<void>
   stopPolling: () => void
 }
 
@@ -27,6 +33,9 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   isResearching: false,
   researchError: null,
   error: null,
+  reportContent: {},
+  reportLoadingId: null,
+  reportError: null,
 
   fetchRecords: async (projectId) => {
     set({ loading: true, error: null })
@@ -70,6 +79,20 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   },
 
   selectRecord: (id) => set({ selectedRecordId: id }),
+
+  fetchReport: async (projectId, researchId) => {
+    if (get().reportContent[researchId] !== undefined) return  // already cached
+    set({ reportLoadingId: researchId, reportError: null })
+    try {
+      const { content } = await researchApi.getResearchReport(projectId, researchId)
+      set((s) => ({
+        reportContent: { ...s.reportContent, [researchId]: content },
+        reportLoadingId: null,
+      }))
+    } catch (e) {
+      set({ reportLoadingId: null, reportError: String(e) })
+    }
+  },
 
   stopPolling: () => {
     if (researchPollInterval) {

@@ -1,10 +1,16 @@
 """
 Talent Agent API endpoints.
 
-POST /talent/parse-images    — Parse images via Vision LLM
-POST /talent/parse-document  — Parse PDF / Word (text extraction + LLM)
-POST /talent/parse-text      — Parse raw pasted text via LLM
-POST /talent/confirm-import  — Write confirmed candidates to the DB
+Each parse endpoint accepts skip_dedup=true to return parsed candidates
+without conflict info attached. In that case the caller (typically the
+frontend's stepwise import flow) is expected to call /check-duplicates next.
+This split lets the UI render a per-stage progress indicator.
+
+POST /talent/parse-images       — Parse images via Vision LLM
+POST /talent/parse-document     — Parse PDF / Word (text extraction + LLM)
+POST /talent/parse-text         — Parse raw pasted text via LLM
+POST /talent/check-duplicates   — Batch dedup over already-parsed candidates
+POST /talent/confirm-import     — Write confirmed candidates to the DB
 """
 
 import io
@@ -15,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.talent import TalentAgent
 from app.database import get_db
 from app.schemas.talent import (
+    CheckDuplicatesRequest,
+    CheckDuplicatesResponse,
     ConfirmImportRequest,
     ConfirmImportResponse,
     ExtractDocResponse,
@@ -102,6 +110,7 @@ def _extract_word_text(data: bytes) -> str:
 async def parse_images(
     files: list[UploadFile] = File(...),
     batch_mode: bool = Form(False),
+    skip_dedup: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ) -> ParseResponse:
     if not files:
@@ -127,12 +136,13 @@ async def parse_images(
             )
         images.append((data, media_type))
 
-    return await TalentAgent().parse_images(db, images, batch_mode)
+    return await TalentAgent().parse_images(db, images, batch_mode, skip_dedup=skip_dedup)
 
 
 @router.post("/parse-document", response_model=ParseResponse)
 async def parse_document(
     file: UploadFile = File(...),
+    skip_dedup: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ) -> ParseResponse:
     filename = (file.filename or "").lower()
@@ -155,18 +165,31 @@ async def parse_document(
             error="文档中未能提取到文字内容，可能是扫描件。请改用「图片截图」模式上传。",
         )
 
-    return await TalentAgent().parse_text(db, text, source_type)
+    return await TalentAgent().parse_text(db, text, source_type, skip_dedup=skip_dedup)
 
 
 @router.post("/parse-text", response_model=ParseResponse)
 async def parse_text(
     request: ParseTextRequest,
+    skip_dedup: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> ParseResponse:
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="文字内容不能为空")
 
-    return await TalentAgent().parse_text(db, request.text, "text")
+    return await TalentAgent().parse_text(db, request.text, "text", skip_dedup=skip_dedup)
+
+
+@router.post("/check-duplicates", response_model=CheckDuplicatesResponse)
+async def check_duplicates(
+    request: CheckDuplicatesRequest,
+    db: AsyncSession = Depends(get_db),
+) -> CheckDuplicatesResponse:
+    """Batch dedup for an already-parsed list of candidates."""
+    if not request.candidates:
+        return CheckDuplicatesResponse(conflicts=[])
+    conflicts = await TalentAgent().check_duplicates_batch(db, request.candidates)
+    return CheckDuplicatesResponse(conflicts=conflicts)
 
 
 @router.post("/extract-doc", response_model=ExtractDocResponse)

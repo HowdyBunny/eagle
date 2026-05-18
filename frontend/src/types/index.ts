@@ -4,6 +4,6 @@ export type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSear
 export type { ProjectCandidateStatus, ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse, CandidateEvaluationResponse } from './evaluation'
 export type { ConversationRole, ChatRequest, ChatResponse, ConversationLogResponse } from './conversation'
 export type { OntologyResponse } from './ontology'
-export type { ResearchTriggerRequest, ResearchResponse } from './research'
+export type { ResearchTriggerRequest, ResearchResponse, ResearchReportContent } from './research'
 export type { PreferenceCreate, PreferenceResponse } from './preference'
 export type { ParsedCandidateData, DuplicateConflict, ParseResult, ParseResponse, ConfirmCandidateItem, ConfirmImportRequest, ConfirmImportResponse } from './talent'

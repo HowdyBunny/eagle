@@ -16,7 +16,8 @@ class ResearchResponse(BaseModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
-    ontology_id: uuid.UUID
+    ontology_id: uuid.UUID | None  # null while a task is still RUNNING or FAILED
+    topic: str | None  # the original user-supplied topic (preserved verbatim)
     report_file_path: str | None
     created_at: datetime
     ontology: OntologyResponse | None = None
