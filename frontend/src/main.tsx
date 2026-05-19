@@ -24,6 +24,13 @@ window.addEventListener('unhandledrejection', (e) => {
   reportError({ message: err.message, stack: err.stack, context: 'unhandledrejection' })
 })
 
+// Tauri's dragDropEnabled=false delegates drag-drop to the webview. We block the
+// browser default (navigating away to the dropped file) globally so that
+// drops outside our explicit drop zones simply do nothing instead of replacing
+// the app with a PDF viewer.
+window.addEventListener('dragover', (e) => e.preventDefault())
+window.addEventListener('drop', (e) => e.preventDefault())
+
 const router = createBrowserRouter([
   {
     element: <AppShell />,
