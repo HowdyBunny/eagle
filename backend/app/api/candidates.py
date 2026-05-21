@@ -7,6 +7,11 @@ from app.database import get_db
 from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult
 from app.schemas.evaluation import CandidateEvaluationResponse
 from app.services import candidate_service, evaluation_service
+from app.services.query_rewrite_service import (
+    QueryRewriteRequest,
+    QueryRewriteResponse,
+    rewrite_query,
+)
 from app.services.search_service import SearchService
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -20,11 +25,9 @@ async def create_candidate(
 
 ):
     candidate = await candidate_service.create_candidate(db, data)
-    # Embed experience_summary in background
-    if candidate.experience_summary:
-        from app.services.embedding_service import EmbeddingService
-        svc = EmbeddingService()
-        background_tasks.add_task(svc.embed_candidate, candidate.id, candidate.experience_summary)
+    from app.services.embedding_service import EmbeddingService, candidate_to_index_snapshot
+    svc = EmbeddingService()
+    background_tasks.add_task(svc.embed_candidate, candidate_to_index_snapshot(candidate))
     return candidate
 
 
@@ -73,11 +76,17 @@ async def update_candidate(
     candidate = await candidate_service.update_candidate(db, candidate_id, data)
     if not candidate:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
-    # Re-embed if experience_summary was patched
-    if "experience_summary" in data.model_fields_set and candidate.experience_summary:
-        from app.services.embedding_service import EmbeddingService
+    # Re-embed when any of the indexed fields changed. The new chunking
+    # strategy mixes name / title / company / education / experience into
+    # one document, so any of these edits invalidates the existing chunks.
+    indexed_fields = {
+        "full_name", "current_title", "current_company", "location",
+        "years_experience", "education", "experience_summary", "raw_structured_data",
+    }
+    if indexed_fields & data.model_fields_set:
+        from app.services.embedding_service import EmbeddingService, candidate_to_index_snapshot
         svc = EmbeddingService()
-        background_tasks.add_task(svc.embed_candidate, candidate.id, candidate.experience_summary)
+        background_tasks.add_task(svc.embed_candidate, candidate_to_index_snapshot(candidate))
     return candidate
 
 
@@ -127,3 +136,15 @@ async def search_candidates(
 ):
     svc = SearchService()
     return await svc.hybrid_search(db, request)
+
+
+@router.post("/rewrite-query", response_model=QueryRewriteResponse)
+async def rewrite_query_endpoint(request: QueryRewriteRequest):
+    """
+    Translate a natural-language search query into structured filters +
+    semantic remainder. The endpoint applies a rule gate first so simple
+    queries (identifiers, short names, plain keywords) skip the LLM call
+    and return immediately. Inspect `used_llm` in the response to surface
+    a "smart search active" indicator to the user.
+    """
+    return await rewrite_query(request.query)

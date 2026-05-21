@@ -58,13 +58,41 @@ export interface CandidateSearchRequest {
   max_years_experience?: number | null
   current_company?: string | null
   source_platform?: string | null
+  schools?: string[] | null
   limit?: number
   offset?: number
+  exclude_query?: string | null
+  exclude_companies?: string[] | null
+  exclude_locations?: string[] | null
 }
 
 export interface CandidateSearchResult {
   candidate: CandidateResponse
   sql_matched: boolean
+  fts_matched?: boolean
   vector_score: number | null
   combined_score: number
+}
+
+export interface QueryRewriteFilters {
+  location: string | null
+  min_years_experience: number | null
+  max_years_experience: number | null
+  current_company: string | null
+  schools: string[]
+}
+
+export interface QueryRewriteExclusions {
+  exclude_companies: string[]
+  exclude_locations: string[]
+  exclude_query: string | null
+}
+
+export interface QueryRewriteResponse {
+  raw_query: string
+  semantic_query: string
+  filters: QueryRewriteFilters
+  exclusions: QueryRewriteExclusions
+  used_llm: boolean
+  skip_reason: string | null
 }

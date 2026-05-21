@@ -18,6 +18,7 @@ class Candidate(Base):
     years_experience: Mapped[float | None] = mapped_column(Float, nullable=True)
     salary_range: Mapped[str | None] = mapped_column(String(255), nullable=True)
     education: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    school_canonical: Mapped[str | None] = mapped_column(String(64), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     liepin_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)

@@ -48,6 +48,7 @@ class CandidateResponse(BaseModel):
     years_experience: float | None
     salary_range: str | None
     education: str | None
+    school_canonical: str | None = None
     linkedin_url: str | None
     liepin_url: str | None
     phone: str | None
@@ -67,6 +68,7 @@ class CandidateSearchRequest(BaseModel):
     max_years_experience: float | None = None
     current_company: str | None = None
     source_platform: str | None = None
+    schools: list[str] | None = None  # Exact-match on canonical school slugs (e.g. ["tsinghua", "stanford"])
     limit: int = 20
     offset: int = 0
     # Exclusion filters
@@ -80,8 +82,10 @@ class CandidateSearchResult(BaseModel):
 
     candidate: CandidateResponse
     sql_matched: bool = False
+    fts_matched: bool = False
     vector_score: float | None = None  # Cosine distance from LanceDB (lower = more similar, range 0-2)
     combined_score: float = 0.0        # Final ranking score 0-100 (higher = better match)
-    # Score formula: sql_bonus(40) + vector_similarity(up to 60)
-    # sql_bonus = 40 if hard filters matched, else 0
-    # vector_similarity = (1 - vector_score) * 60, clamped to [0, 60]
+    # Score: Reciprocal Rank Fusion of BM25 (FTS5) and vector rankings, then
+    # min-max scaled into the [0, 100] range across the current result set. A
+    # small bonus is added when the candidate also satisfies every hard SQL
+    # filter so multi-signal hits still rank above one-signal hits.

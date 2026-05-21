@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client'
-import type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult } from '@/types'
+import type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult, QueryRewriteResponse } from '@/types'
 
 export interface ListCandidatesParams {
   location?: string
@@ -36,5 +36,10 @@ export async function deleteCandidate(candidateId: string): Promise<void> {
 
 export async function searchCandidates(body: CandidateSearchRequest): Promise<CandidateSearchResult[]> {
   const { data } = await apiClient.post('/candidates/search', body)
+  return data
+}
+
+export async function rewriteSearchQuery(query: string): Promise<QueryRewriteResponse> {
+  const { data } = await apiClient.post('/candidates/rewrite-query', { query })
   return data
 }

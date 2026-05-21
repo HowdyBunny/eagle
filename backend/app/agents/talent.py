@@ -191,11 +191,11 @@ class TalentAgent:
                 candidate = await candidate_service.update_candidate(
                     db, UUID(item.existing_id), update_data
                 )
-                if candidate and candidate.experience_summary:
+                if candidate:
+                    from app.services.embedding_service import candidate_to_index_snapshot
                     background_tasks.add_task(
                         embed_svc.embed_candidate,
-                        candidate.id,
-                        candidate.experience_summary,
+                        candidate_to_index_snapshot(candidate),
                     )
                 updated += 1
 
@@ -224,12 +224,11 @@ class TalentAgent:
                     source_platform=item.source_platform,
                 )
                 candidate = await candidate_service.create_candidate(db, create_data)
-                if candidate.experience_summary:
-                    background_tasks.add_task(
-                        embed_svc.embed_candidate,
-                        candidate.id,
-                        candidate.experience_summary,
-                    )
+                from app.services.embedding_service import candidate_to_index_snapshot
+                background_tasks.add_task(
+                    embed_svc.embed_candidate,
+                    candidate_to_index_snapshot(candidate),
+                )
                 created += 1
 
         return ConfirmImportResponse(created=created, updated=updated, skipped=skipped)

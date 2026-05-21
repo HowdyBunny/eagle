@@ -1,6 +1,6 @@
 export type { ProjectStatus, ProjectCreate, ProjectUpdate, ProjectResponse } from './project'
 export type { ThreadCreate, ThreadRename, ThreadResponse } from './thread'
-export type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult } from './candidate'
+export type { CandidateCreate, CandidateUpdate, CandidateResponse, CandidateSearchRequest, CandidateSearchResult, QueryRewriteResponse, QueryRewriteFilters, QueryRewriteExclusions } from './candidate'
 export type { ProjectCandidateStatus, ProjectCandidateResponse, ProjectCandidateUpdate, EvaluationStatusResponse, CandidateEvaluationResponse } from './evaluation'
 export type { ConversationRole, ChatRequest, ChatResponse, ConversationLogResponse } from './conversation'
 export type { OntologyResponse } from './ontology'

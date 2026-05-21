@@ -4,7 +4,10 @@ from __future__ import annotations
 LanceDB service — replaces ChromaDB for vector storage.
 
 Three tables (fixed schemas, cosine distance):
-  - candidate_embeddings   : (id, vector, document, embedding_model_version)
+  - candidate_embeddings   : (id, candidate_id, chunk_type, chunk_index,
+                              vector, document, embedding_model_version)
+                              — multiple chunks per candidate (profile +
+                              one per work experience). Group by candidate_id.
   - requirement_embeddings : (id, vector, document, embedding_model_version)
   - industry_knowledge     : (id, vector, document, source_ontology_id,
                               embedding_model_version)
@@ -46,6 +49,21 @@ def _simple_schema() -> pa.Schema:
     )
 
 
+def _candidate_schema() -> pa.Schema:
+    """Multi-chunk schema: one row per (candidate, chunk). Group by candidate_id."""
+    return pa.schema(
+        [
+            pa.field("id", pa.string()),               # chunk uuid
+            pa.field("candidate_id", pa.string()),     # group key
+            pa.field("chunk_type", pa.string()),       # "profile" | "experience"
+            pa.field("chunk_index", pa.int32()),       # ordinal within candidate
+            _vector_field(),
+            pa.field("document", pa.string()),
+            pa.field("embedding_model_version", pa.string()),
+        ]
+    )
+
+
 def _industry_schema() -> pa.Schema:
     return pa.schema(
         [
@@ -65,24 +83,42 @@ def get_db() -> lancedb.DBConnection:
     return _db
 
 
-def _check_and_reset_schema(db: lancedb.DBConnection, name: str, expected_dim: int) -> None:
+def _check_and_reset_schema(
+    db: lancedb.DBConnection,
+    name: str,
+    expected_dim: int,
+    required_fields: tuple[str, ...] = (),
+) -> None:
     """
-    Drop `name` if its stored vector dimension doesn't match expected_dim.
-    Called at startup so schema mismatches (e.g. after changing EMBEDDING_DIMENSIONS
-    or switching embedding models) are caught early rather than crashing on first write.
+    Drop `name` if either:
+      - its stored vector dim doesn't match expected_dim
+      - any of `required_fields` is missing from its schema
+
+    Called at startup so schema mismatches (e.g. after changing EMBEDDING_DIMENSIONS,
+    switching embedding models, or upgrading the chunked-candidate schema) are caught
+    early rather than crashing on first write.
     """
     if name not in db.table_names():
         return
     try:
+        from app.utils.logger import logger
+
         tbl = db.open_table(name)
         schema = tbl.schema
-        vec_field = schema.field("vector")
-        stored_dim: int = vec_field.type.list_size
+        stored_dim: int = schema.field("vector").type.list_size
+        existing_names = {f.name for f in schema}
+        missing = [f for f in required_fields if f not in existing_names]
         if stored_dim != expected_dim:
-            from app.utils.logger import logger
             logger.warning(
                 f"LanceDB table '{name}' has vector dim={stored_dim} but "
                 f"EMBEDDING_DIMENSIONS={expected_dim}. Dropping and recreating."
+            )
+            db.drop_table(name)
+        elif missing:
+            logger.warning(
+                f"LanceDB table '{name}' is missing fields {missing}; "
+                f"dropping so the new chunked schema can be recreated. "
+                f"Run scripts/reembed_candidates.py to repopulate."
             )
             db.drop_table(name)
     except Exception:
@@ -91,13 +127,17 @@ def _check_and_reset_schema(db: lancedb.DBConnection, name: str, expected_dim: i
 
 def validate_schemas() -> None:
     """
-    Run at app startup. Drops any LanceDB table whose vector dimension
-    doesn't match the current EMBEDDING_DIMENSIONS setting.
+    Run at app startup. Drops any LanceDB table whose vector dimension or
+    required field set no longer matches the current code.
     """
     db = get_db()
     dim = settings.EMBEDDING_DIMENSIONS
-    for table_name in (CANDIDATE_TABLE, REQUIREMENT_TABLE, INDUSTRY_TABLE):
-        _check_and_reset_schema(db, table_name, dim)
+    _check_and_reset_schema(
+        db, CANDIDATE_TABLE, dim,
+        required_fields=("candidate_id", "chunk_type", "chunk_index"),
+    )
+    _check_and_reset_schema(db, REQUIREMENT_TABLE, dim)
+    _check_and_reset_schema(db, INDUSTRY_TABLE, dim)
 
 
 def _open_or_create(name: str, schema: pa.Schema) -> Table:
@@ -108,7 +148,7 @@ def _open_or_create(name: str, schema: pa.Schema) -> Table:
 
 
 def get_candidate_table() -> Table:
-    return _open_or_create(CANDIDATE_TABLE, _simple_schema())
+    return _open_or_create(CANDIDATE_TABLE, _candidate_schema())
 
 
 def get_industry_table() -> Table:
@@ -143,6 +183,15 @@ async def table_add_async(table: Table, rows: list[dict]) -> None:
     loop = asyncio.get_running_loop()
     async with _write_lock:
         await loop.run_in_executor(None, lambda: table.add(rows))
+
+
+async def delete_candidate_chunks_async(table: Table, candidate_id: str) -> None:
+    """Delete every chunk belonging to a single candidate from the chunked table."""
+    loop = asyncio.get_running_loop()
+    async with _write_lock:
+        await loop.run_in_executor(
+            None, lambda: table.delete(f"candidate_id = '{candidate_id}'")
+        )
 
 
 def vector_search(table: Table, query_vector: list[float], limit: int) -> list[dict]:

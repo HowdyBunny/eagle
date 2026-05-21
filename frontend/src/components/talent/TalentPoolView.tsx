@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, Search, Filter, X, Trash2, UserPlus } from 'lucide-react'
+import { Users, Search, Filter, X, Trash2, UserPlus, Sparkles, Loader2 } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
 import { useDebounce } from '@/hooks/use-debounce'
 import EmptyState from '@/components/shared/EmptyState'
@@ -7,7 +7,37 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import StatusBadge from '@/components/shared/StatusBadge'
 import CandidateDetailSheet from './CandidateDetailSheet'
 import AddCandidateDialog from './AddCandidateDialog'
-import type { CandidateResponse } from '@/types'
+import type { CandidateResponse, QueryRewriteResponse } from '@/types'
+
+// Chip rendered below the search box for each filter the LLM extracted.
+// Each chip is clickable-to-remove so the recruiter stays in control of
+// what got auto-applied.
+interface RewriteChip {
+  label: string
+  bucket: 'filters' | 'exclusions'
+  key: string
+  value?: string
+}
+
+function chipsFromRewrite(r: QueryRewriteResponse | null): RewriteChip[] {
+  if (!r) return []
+  const chips: RewriteChip[] = []
+  const f = r.filters
+  if (f.location) chips.push({ label: `📍 ${f.location}`, bucket: 'filters', key: 'location' })
+  if (f.min_years_experience != null)
+    chips.push({ label: `≥ ${f.min_years_experience}年`, bucket: 'filters', key: 'min_years_experience' })
+  if (f.max_years_experience != null)
+    chips.push({ label: `≤ ${f.max_years_experience}年`, bucket: 'filters', key: 'max_years_experience' })
+  if (f.current_company) chips.push({ label: `🏢 ${f.current_company}`, bucket: 'filters', key: 'current_company' })
+  for (const s of f.schools) chips.push({ label: `🎓 ${s}`, bucket: 'filters', key: 'schools', value: s })
+  const e = r.exclusions
+  for (const c of e.exclude_companies)
+    chips.push({ label: `❌ ${c}`, bucket: 'exclusions', key: 'exclude_companies', value: c })
+  for (const l of e.exclude_locations)
+    chips.push({ label: `❌ 📍 ${l}`, bucket: 'exclusions', key: 'exclude_locations', value: l })
+  if (e.exclude_query) chips.push({ label: `❌ ${e.exclude_query}`, bucket: 'exclusions', key: 'exclude_query' })
+  return chips
+}
 
 function computeCompleteness(c: CandidateResponse): number {
   let s = 0
@@ -25,8 +55,10 @@ function computeCompleteness(c: CandidateResponse): number {
 export default function TalentPoolView() {
   const {
     candidates, searchResults, isSearchMode, loading,
-    fetchCandidates, searchCandidates, deleteCandidate, setFilters, setPage, clearSearch,
+    fetchCandidates, searchCandidates, rerunSearchWithCurrentRewrite,
+    deleteCandidate, setFilters, setPage, clearSearch,
     filters, skip, limit,
+    smartSearch, setSmartSearch, rewriteResult, rewriteLoading, removeRewriteFilter,
   } = useCandidateStore()
 
   const [query, setQuery] = useState('')
@@ -62,6 +94,15 @@ export default function TalentPoolView() {
       clearSearch()
     }
   }, [debouncedQuery, searchCandidates, clearSearch])
+
+  // Re-run the active query whenever filters change in search mode.
+  // Without this, changing a filter while a query is active silently dropped you
+  // back into the unfiltered list view.
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      searchCandidates(debouncedQuery.trim())
+    }
+  }, [filters, debouncedQuery, searchCandidates])
 
   const displayedCandidates = isSearchMode
     ? searchResults.map((r) => r.candidate)
@@ -108,11 +149,21 @@ export default function TalentPoolView() {
       <div className="mb-4 space-y-3">
         <div className="flex gap-3">
           <div className="flex-1 relative">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary/60" />
+            {rewriteLoading ? (
+              <Loader2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary animate-spin" />
+            ) : (
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary/60" />
+            )}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="语义搜索候选人（技能、经历、行业...）"
+              placeholder={
+                rewriteLoading
+                  ? '正在理解查询...'
+                  : smartSearch
+                  ? '语义搜索 · 智能模式（复杂查询会调用 LLM 解析）'
+                  : '关键词搜索 · 搜索名字、电话、邮箱、公司等'
+              }
               className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-on-surface placeholder:text-secondary/50 outline-none focus:border-primary/30 transition-colors shadow-sm"
             />
             {query && (
@@ -122,6 +173,17 @@ export default function TalentPoolView() {
             )}
           </div>
           <button
+            onClick={() => setSmartSearch(!smartSearch)}
+            title={smartSearch ? '点击关闭：纯关键词搜索，零 token 消耗' : '点击启用：复杂查询会调用 LLM 拆解（消耗少量 token）'}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+              smartSearch
+                ? 'bg-primary/10 border-primary/30 text-primary'
+                : 'bg-surface-container-lowest border-outline-variant/10 text-secondary hover:text-on-surface'
+            }`}
+          >
+            <Sparkles size={14} /> 智能
+          </button>
+          <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
               showFilters ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-surface-container-lowest border-outline-variant/10 text-secondary hover:text-on-surface'
@@ -130,6 +192,34 @@ export default function TalentPoolView() {
             <Filter size={14} /> 筛选
           </button>
         </div>
+
+        {/* LLM-extracted filter chips. Visible only when a rewrite actually
+            spent an LLM call and produced something. Click the × to remove
+            a single chip — the search re-runs without that constraint. */}
+        {rewriteResult?.used_llm && chipsFromRewrite(rewriteResult).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/15 rounded-xl">
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary mr-1">
+              智能解析
+            </span>
+            {chipsFromRewrite(rewriteResult).map((chip, i) => (
+              <button
+                key={`${chip.bucket}-${chip.key}-${chip.value ?? ''}-${i}`}
+                onClick={() => {
+                  removeRewriteFilter(chip.bucket, chip.key, chip.value)
+                  // Re-run the search using the *edited* rewriteResult, skipping
+                  // a fresh LLM call. Otherwise removing a chip would just be
+                  // immediately overwritten by another rewrite returning the
+                  // same chips for the same query.
+                  if (debouncedQuery.trim()) rerunSearchWithCurrentRewrite(debouncedQuery.trim())
+                }}
+                className="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-lowest border border-outline-variant/20 text-xs text-on-surface hover:border-red-300 transition-colors"
+              >
+                <span>{chip.label}</span>
+                <X size={10} className="text-secondary group-hover:text-red-500" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Advanced filters */}
         {showFilters && (
@@ -149,7 +239,8 @@ export default function TalentPoolView() {
                   onChange={(e) => {
                     const val = type === 'number' ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value
                     setFilters({ [key]: val } as Parameters<typeof setFilters>[0])
-                    fetchCandidates()
+                    // In search mode the useEffect above re-runs the search; otherwise refresh the list.
+                    if (!debouncedQuery.trim()) fetchCandidates()
                   }}
                   className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm text-on-surface outline-none border border-transparent focus:border-primary/20 transition-colors"
                 />
@@ -165,6 +256,16 @@ export default function TalentPoolView() {
           <span className="text-[10px] font-black uppercase tracking-widest text-primary">
             语义搜索结果 · {searchResults.length} 条
           </span>
+          {rewriteResult?.used_llm && (
+            <span className="text-[10px] font-bold text-primary/70">
+              · 已调用 LLM 解析查询
+            </span>
+          )}
+          {smartSearch && rewriteResult && !rewriteResult.used_llm && (
+            <span className="text-[10px] text-secondary/70">
+              · 简单查询，未调用 LLM
+            </span>
+          )}
           <button onClick={() => { setQuery(''); clearSearch() }} className="text-[10px] text-secondary hover:text-on-surface underline">
             清除搜索
           </button>

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateCreate, CandidateUpdate
 from app.services.confidence_service import calculate_confidence_score
+from app.services.school_normalizer import canonicalize_school
 
 
 async def create_candidate(db: AsyncSession, data: CandidateCreate) -> Candidate:
@@ -24,6 +25,7 @@ async def create_candidate(db: AsyncSession, data: CandidateCreate) -> Candidate
         years_experience=data.years_experience,
         salary_range=data.salary_range,
         education=data.education,
+        school_canonical=canonicalize_school(data.education),
         linkedin_url=data.linkedin_url,
         liepin_url=data.liepin_url,
         phone=data.phone,
@@ -88,6 +90,9 @@ async def update_candidate(
     patch = data.model_dump(exclude_unset=True)
     for field, value in patch.items():
         setattr(candidate, field, value)
+    # Keep the canonical school slug in sync whenever education is touched.
+    if "education" in patch:
+        candidate.school_canonical = canonicalize_school(candidate.education)
     candidate.updated_at = datetime.now(tz=timezone.utc)
     await db.commit()
     await db.refresh(candidate)
