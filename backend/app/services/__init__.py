@@ -6,6 +6,7 @@ from app.services import (
     preference_service,
     project_service,
     research_service,
+    talent_list_service,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "preference_service",
     "research_service",
     "ontology_service",
+    "talent_list_service",
 ]

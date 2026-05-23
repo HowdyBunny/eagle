@@ -9,6 +9,8 @@ import ChatPage from './pages/ChatPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import TalentPage from './pages/TalentPage'
+import TalentListsPage from './pages/TalentListsPage'
+import TalentListDetailPage from './pages/TalentListDetailPage'
 import ResearchPage from './pages/ResearchPage'
 import SettingsPage from './pages/SettingsPage'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -39,6 +41,8 @@ const router = createBrowserRouter([
       { path: '/projects', element: <ProjectsPage /> },
       { path: '/projects/:id', element: <ProjectDetailPage /> },
       { path: '/talent', element: <TalentPage /> },
+      { path: '/talent-lists', element: <TalentListsPage /> },
+      { path: '/talent-lists/:id', element: <TalentListDetailPage /> },
       { path: '/research', element: <ResearchPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],

@@ -38,7 +38,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateResponse, CandidateSearchRequest, CandidateSearchResult
 from app.services.embedding_service import EmbeddingService
-from app.services.lancedb_service import get_candidate_table, vector_search
+from app.services.lancedb_service import (
+    get_candidate_table,
+    get_table_async,
+    vector_search_async,
+)
 from app.services.query_router import Identifier, detect_identifier
 
 # RRF constant. 60 is the textbook value from Cormack et al. — high enough
@@ -431,7 +435,11 @@ class SearchService:
     ) -> dict[uuid.UUID, float]:
         query_embedding = await self.embedding_svc.get_embedding(query_text)
         # Over-fetch because multiple chunks share a candidate_id.
-        rows = vector_search(get_candidate_table(), query_embedding, limit=limit * 4)
+        # Use the _async wrappers so the sync LanceDB query runs in a thread
+        # pool — otherwise it blocks the event loop and concurrent requests
+        # stall at the TCP layer (browser sees ERR_NETWORK).
+        table = await get_table_async(get_candidate_table)
+        rows = await vector_search_async(table, query_embedding, limit=limit * 4)
         best: dict[uuid.UUID, float] = {}
         for r in rows:
             cid_raw = r.get("candidate_id") or r.get("id")

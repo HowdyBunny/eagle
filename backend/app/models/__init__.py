@@ -7,6 +7,12 @@ from app.models.project import Project, ProjectStatus
 from app.models.project_candidate import ProjectCandidate, ProjectCandidateStatus
 from app.models.project_research import ProjectResearch, ResearchTaskStatus
 from app.models.skill_ontology import SkillOntology
+from app.models.talent_list import (
+    TalentList,
+    TalentListMember,
+    TalentListMemberStatus,
+    TalentListSource,
+)
 
 __all__ = [
     "Project",
@@ -21,4 +27,8 @@ __all__ = [
     "ConversationLog",
     "ConversationRole",
     "ConversationThread",
+    "TalentList",
+    "TalentListMember",
+    "TalentListMemberStatus",
+    "TalentListSource",
 ]

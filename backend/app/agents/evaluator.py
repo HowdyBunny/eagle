@@ -149,6 +149,19 @@ class EvaluatorAgent:
             # 5. Build evaluation prompt
             prompt = self._build_evaluation_prompt(project, candidate, weight_context, industry_context)
 
+            # Release the SQLite read transaction before the long LLM call.
+            #
+            # SQLAlchemy's AsyncSession opens a transaction on the first
+            # execute() and keeps it open until commit/rollback. Even a
+            # read-only transaction holds a connection-level handle in
+            # SQLite that contends with other writers' commits — empirically
+            # this caused concurrent /evaluate requests to stall ~5s
+            # (the SQLite default busy_timeout) until this transaction was
+            # released. Committing here (no pending changes) ends the
+            # transaction and unblocks other writers immediately. The
+            # subsequent save_evaluation will open a fresh transaction.
+            await self.db.commit()
+
             # 6. Call LLM for evaluation
             messages = [
                 {"role": "system", "content": EA_SYSTEM_PROMPT},
@@ -249,11 +262,20 @@ class EvaluatorAgent:
         if not project.requirement_profile:
             return ""
         try:
-            from app.services.lancedb_service import get_industry_table, vector_search
+            # Use the *_async LanceDB wrappers — the sync versions block the
+            # event loop, which under concurrent /evaluate calls stalls new
+            # incoming HTTP requests at the TCP layer (browser sees ERR_NETWORK
+            # / "Network Error"). See lancedb_service.vector_search docstring.
+            from app.services.lancedb_service import (
+                get_industry_table,
+                get_table_async,
+                vector_search_async,
+            )
             query_text = f"{project.jd_raw or ''} {str(project.requirement_profile)}"
             query_embedding = await self.embedding_svc.get_embedding(query_text[:2000])
 
-            rows = vector_search(get_industry_table(), query_embedding, limit=3)
+            table = await get_table_async(get_industry_table)
+            rows = await vector_search_async(table, query_embedding, limit=3)
             if not rows:
                 return ""
             return "\n\n".join(r["document"] for r in rows)

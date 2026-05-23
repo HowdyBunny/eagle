@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, Search, Filter, X, Trash2, UserPlus, Sparkles, Loader2 } from 'lucide-react'
+import { Users, Search, Filter, X, Trash2, UserPlus, Sparkles, Loader2, Bookmark } from 'lucide-react'
 import { useCandidateStore } from '@/stores/candidate-store'
 import { useDebounce } from '@/hooks/use-debounce'
 import EmptyState from '@/components/shared/EmptyState'
@@ -7,7 +7,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import StatusBadge from '@/components/shared/StatusBadge'
 import CandidateDetailSheet from './CandidateDetailSheet'
 import AddCandidateDialog from './AddCandidateDialog'
-import type { CandidateResponse, QueryRewriteResponse } from '@/types'
+import SaveSearchDialog from '@/components/talent-lists/SaveSearchDialog'
+import type { CandidateResponse, QueryRewriteResponse, TalentListFiltersJson } from '@/types'
 
 // Chip rendered below the search box for each filter the LLM extracted.
 // Each chip is clickable-to-remove so the recruiter stays in control of
@@ -64,10 +65,29 @@ export default function TalentPoolView() {
   const [query, setQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateResponse | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const debouncedQuery = useDebounce(query, 400)
+
+  // Snapshot of what produced the currently-visible result set, so the
+  // SaveSearchDialog can persist exactly what the recruiter sees on screen.
+  const filtersSnapshot: TalentListFiltersJson = {
+    query: debouncedQuery.trim() || null,
+    location: filters.location || null,
+    min_years_experience: filters.minYears ?? null,
+    max_years_experience: filters.maxYears ?? null,
+    current_company: filters.company || null,
+    schools: rewriteResult?.filters.schools?.length ? rewriteResult.filters.schools : null,
+    exclude_companies: rewriteResult?.exclusions.exclude_companies?.length
+      ? rewriteResult.exclusions.exclude_companies
+      : null,
+    exclude_locations: rewriteResult?.exclusions.exclude_locations?.length
+      ? rewriteResult.exclusions.exclude_locations
+      : null,
+    exclude_query: rewriteResult?.exclusions.exclude_query ?? null,
+  }
 
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -122,13 +142,28 @@ export default function TalentPoolView() {
           <h2 className="font-headline font-black text-2xl tracking-tight text-on-surface">人才库</h2>
           <p className="text-sm text-secondary mt-0.5">所有候选人的全局人才池</p>
         </div>
-        <button
-          onClick={() => setShowAddDialog(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl kinetic-gradient text-white text-sm font-headline font-semibold hover:shadow-md transition-all scale-98-active"
-        >
-          <UserPlus size={15} />
-          手动添加候选人
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            disabled={displayedCandidates.length === 0}
+            title={
+              displayedCandidates.length === 0
+                ? '当前没有可保存的候选人'
+                : '将当前命中的候选人保存到名单'
+            }
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/25 text-primary text-sm font-headline font-semibold hover:bg-primary/5 transition-all scale-98-active disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Bookmark size={15} />
+            保存搜索
+          </button>
+          <button
+            onClick={() => setShowAddDialog(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl kinetic-gradient text-white text-sm font-headline font-semibold hover:shadow-md transition-all scale-98-active"
+          >
+            <UserPlus size={15} />
+            手动添加候选人
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -283,7 +318,19 @@ export default function TalentPoolView() {
         />
       ) : (
         <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 shadow-sm overflow-hidden">
-          <table className="w-full">
+          {/* table-fixed + explicit col widths so the "确认删除？" inline
+              confirm and other per-row state changes don't reflow the
+              whole table. */}
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[18%]" />{/* 候选人 */}
+              <col className="w-[20%]" />{/* 职位/公司 */}
+              <col className="w-[8%]" />{/* 经验 */}
+              <col className="w-[14%]" />{/* 地点 */}
+              <col className="w-[14%]" />{/* 时效/完整 */}
+              <col className="w-[10%]" />{/* 来源 */}
+              <col className="w-[16%]" />{/* 操作 */}
+            </colgroup>
             <thead>
               <tr className="bg-surface-container-low border-b border-outline-variant/10">
                 {['候选人', '职位 / 公司', '经验', '地点', '时效 / 完整', '来源', '操作'].map((h) => (
@@ -430,6 +477,14 @@ export default function TalentPoolView() {
       <AddCandidateDialog
         open={showAddDialog}
         onClose={() => setShowAddDialog(false)}
+      />
+
+      <SaveSearchDialog
+        open={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        candidates={displayedCandidates}
+        query={debouncedQuery}
+        filtersJson={filtersSnapshot}
       />
     </div>
   )

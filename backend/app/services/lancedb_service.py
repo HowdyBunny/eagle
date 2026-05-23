@@ -195,10 +195,42 @@ async def delete_candidate_chunks_async(table: Table, candidate_id: str) -> None
 
 
 def vector_search(table: Table, query_vector: list[float], limit: int) -> list[dict]:
-    """Cosine-distance kNN search. Each row has `_distance` plus all columns."""
+    """
+    Cosine-distance kNN search. Each row has `_distance` plus all columns.
+
+    Synchronous — blocks the calling thread (and the asyncio event loop if
+    called from a coroutine). Prefer `vector_search_async` from async paths;
+    using this directly inside an async handler stalls every other in-flight
+    request (Network Errors on concurrent calls, etc.).
+    """
     return (
         table.search(query_vector)
         .metric("cosine")
         .limit(limit)
         .to_list()
     )
+
+
+async def vector_search_async(
+    table: Table, query_vector: list[float], limit: int
+) -> list[dict]:
+    """
+    Async-safe wrapper: runs the sync LanceDB query in a thread pool so the
+    event loop keeps accepting other requests while the search is in flight.
+    Reads don't need _write_lock — LanceDB supports concurrent readers.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, lambda: vector_search(table, query_vector, limit)
+    )
+
+
+async def get_table_async(getter) -> Table:
+    """
+    Async-safe wrapper for the sync `get_*_table()` helpers. The first call
+    for a given table may hit disk (open or create), which blocks the loop.
+    Once opened the underlying connection caches the handle so subsequent
+    calls are cheap, but we still go through the executor for consistency.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, getter)

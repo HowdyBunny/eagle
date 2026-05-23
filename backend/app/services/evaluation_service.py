@@ -27,6 +27,46 @@ async def get_or_create_project_candidate(
     return pc
 
 
+async def reset_for_new_evaluation(
+    db: AsyncSession, project_id: uuid.UUID, candidate_id: uuid.UUID
+) -> ProjectCandidate | None:
+    """
+    Wipe the previous EA output so a re-triggered evaluation starts from a clean
+    "评估中" state in the UI.
+
+    Without this, a row that previously ended in `failed` (or even a completed
+    eval the recruiter is re-running) would still surface its old status to the
+    frontend until the new EA completes. The badge would briefly show
+    "评估失败" or the stale score instead of "评估中".
+
+    Preserves: project_id, candidate_id, id (so foreign key references survive)
+    Resets: status, evaluated_at, match_score, dimension_scores, recommendation,
+            risk_flags, llm_raw_output, trigger_source. We deliberately keep
+            hunter_feedback — that's the recruiter's own annotation and re-running
+            evaluation shouldn't erase it.
+    """
+    result = await db.execute(
+        select(ProjectCandidate).where(
+            ProjectCandidate.project_id == project_id,
+            ProjectCandidate.candidate_id == candidate_id,
+        )
+    )
+    pc = result.scalar_one_or_none()
+    if not pc:
+        return None
+    pc.status = ProjectCandidateStatus.PENDING
+    pc.evaluated_at = None
+    pc.match_score = None
+    pc.dimension_scores = None
+    pc.recommendation = None
+    pc.risk_flags = None
+    pc.llm_raw_output = None
+    pc.trigger_source = None
+    await db.commit()
+    await db.refresh(pc)
+    return pc
+
+
 async def save_evaluation(
     db: AsyncSession,
     project_id: uuid.UUID,

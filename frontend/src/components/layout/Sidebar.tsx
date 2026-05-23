@@ -1,11 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { MessageSquare, FolderOpen, Users, BarChart2, Settings, PlusCircle } from 'lucide-react'
+import { MessageSquare, FolderOpen, Users, BarChart2, Settings, PlusCircle, Bookmark } from 'lucide-react'
 import { useAppStore } from '@/stores/app-store'
 import { useChatStore } from '@/stores/chat-store'
 
 const navItems = [
   { to: '/', icon: MessageSquare, label: '对话' },
   { to: '/projects', icon: FolderOpen, label: '招聘项目' },
+  { to: '/talent-lists', icon: Bookmark, label: '名单' },
   { to: '/talent', icon: Users, label: '人才库' },
   { to: '/research', icon: BarChart2, label: '行业研究' },
   { to: '/settings', icon: Settings, label: '设置' },

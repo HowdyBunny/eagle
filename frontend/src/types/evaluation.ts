@@ -1,6 +1,13 @@
 import type { CandidateResponse } from './candidate'
 
-export type ProjectCandidateStatus = 'pending' | 'recommended' | 'eliminated' | 'interviewed'
+export type ProjectCandidateStatus =
+  | 'pending'
+  | 'recommended'
+  | 'eliminated'
+  | 'interviewed'
+  // Backend sets this when the Evaluator Agent crashes (LLM error, etc.).
+  // Surfaced in the UI as "评估失败" with a retry affordance.
+  | 'failed'
 
 export interface ProjectCandidateResponse {
   id: string
