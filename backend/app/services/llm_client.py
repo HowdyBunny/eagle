@@ -203,7 +203,7 @@ class LLMClient:
                 error=error,
             )
 
-    async def simple_chat(self, messages: list[dict], max_tokens: int = 4096) -> str:
+    async def simple_chat(self, messages: list[dict], max_tokens: int = 8192) -> str:
         """Single-turn text completion, no tools."""
         t0 = time.monotonic()
         error: str | None = None
@@ -297,7 +297,7 @@ class LLMClient:
         system_prompt: str,
         user_text: str,
         images: list[tuple[bytes, str]],
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> str:
         """
         Single-turn chat with image inputs.
@@ -352,7 +352,7 @@ class LLMClient:
         while True:
             response = await self._get_client().chat.completions.create(
                 model=settings.LLM_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 messages=msgs,
                 tools=tools,
                 tool_choice="auto",
@@ -424,7 +424,7 @@ class LLMClient:
             # typically empty, so no premature text gets shown to the user.
             stream = await self._get_client().chat.completions.create(
                 model=settings.LLM_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 messages=msgs,
                 tools=tools,
                 tool_choice="auto",
@@ -600,7 +600,7 @@ class LLMClient:
             # Stream using raw SSE events
             async with client.messages.stream(  # type: ignore[union-attr]
                 model=settings.LLM_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 system=system,
                 messages=msgs,
                 tools=anthropic_tools,
@@ -710,7 +710,7 @@ class LLMClient:
         while True:
             response = await self._get_client().messages.create(
                 model=settings.LLM_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 system=system,
                 messages=msgs,
                 tools=anthropic_tools,

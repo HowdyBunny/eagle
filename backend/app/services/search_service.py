@@ -254,25 +254,53 @@ class SearchService:
         sql_ids: set[uuid.UUID],
     ) -> list[CandidateSearchResult]:
         """
-        SQL ILIKE substring match across name / title / company / phone / email.
+        SQL ILIKE substring match for queries too short for trigram FTS.
 
-        Used for queries too short for the trigram FTS tokenizer. Results are
-        tiered by where the match landed so an exact-name hit beats a buried
-        title substring even though they're both "contains" matches.
+        Mirrors the field coverage of the FTS path so that short and long
+        queries reach the same data: direct columns on `candidates` plus a
+        subquery into `candidates_fts` for the flattened experience text and
+        the other indexed columns (education / location / summary).
+
+        Without the FTS subquery, "阳光" would miss a candidate whose past
+        company was 阳光电源 even though "阳光电源" (long query, FTS path)
+        finds them — that inconsistency is the bug this guards against.
+
+        Results are tiered by where the match landed: name > current
+        company/title > past experiences. Trigram has no 3-gram for <3 char
+        queries so the FTS subquery is a sequential LIKE — fine at talent-
+        pool scale.
         """
         q = request.query.strip()
         needle = f"%{q}%"
-        result = await db.execute(
-            select(Candidate).where(
-                or_(
-                    Candidate.full_name.ilike(needle),
-                    Candidate.current_title.ilike(needle),
-                    Candidate.current_company.ilike(needle),
-                    Candidate.phone.ilike(needle),
-                    Candidate.email.ilike(needle),
-                )
-            )
+
+        extra_rows = await db.execute(
+            text(
+                "SELECT candidate_id FROM candidates_fts WHERE "
+                "experiences_text LIKE :needle OR "
+                "experience_summary LIKE :needle OR "
+                "education LIKE :needle OR "
+                "location LIKE :needle"
+            ),
+            {"needle": needle},
         )
+        extra_ids: set[uuid.UUID] = set()
+        for row in extra_rows.fetchall():
+            try:
+                extra_ids.add(uuid.UUID(row[0]))
+            except (TypeError, ValueError):
+                continue
+
+        conds = [
+            Candidate.full_name.ilike(needle),
+            Candidate.current_title.ilike(needle),
+            Candidate.current_company.ilike(needle),
+            Candidate.phone.ilike(needle),
+            Candidate.email.ilike(needle),
+        ]
+        if extra_ids:
+            conds.append(Candidate.id.in_(extra_ids))
+
+        result = await db.execute(select(Candidate).where(or_(*conds)))
         candidates = list(result.scalars().all())
 
         # Honour hard filters if any are set.
@@ -291,8 +319,14 @@ class SearchService:
                 # (the rest comes later: name length tiebreaker).
                 idx = name.find(ql)
                 return 90.0 - min(idx, 10) * 1.5
-            # Match must have landed in title/company/phone/email.
-            return 60.0
+            title = (c.current_title or "").lower()
+            company = (c.current_company or "").lower()
+            phone = (c.phone or "").lower()
+            email = (c.email or "").lower()
+            if ql in title or ql in company or ql in phone or ql in email:
+                return 60.0
+            # Match landed in past experiences / summary / education / location.
+            return 50.0
 
         scored = sorted(
             ((c, score_for(c)) for c in candidates),

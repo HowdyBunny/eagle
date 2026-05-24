@@ -94,7 +94,13 @@ export const useTalentListStore = create<TalentListState>((set, get) => ({
   },
 
   fetchList: async (listId) => {
-    set({ loadingDetail: true, error: null })
+    // Only flip loadingDetail on the *initial* fetch for this list — otherwise
+    // every 5s poll would replace the whole detail view with the spinner and
+    // re-render it, causing a visible flicker. For same-list refreshes we let
+    // the new data drop in silently; React only re-renders the rows that
+    // actually changed (e.g. an evaluation badge moving from 评估中 → 已评估).
+    const isInitial = get().currentList?.id !== listId
+    if (isInitial) set({ loadingDetail: true, error: null })
     try {
       const list = await listsApi.getTalentList(listId)
       set({ currentList: list, loadingDetail: false })

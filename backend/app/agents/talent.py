@@ -118,6 +118,7 @@ class TalentAgent:
                 system_prompt=_SYSTEM_PROMPT,
                 user_text=user_text,
                 images=images,
+                max_tokens=16384,
             )
         except VisionNotSupportedError as exc:
             return ParseResponse(results=[], error=str(exc))
@@ -152,7 +153,9 @@ class TalentAgent:
         ]
 
         try:
-            raw = await self._llm.simple_chat(messages)
+            # 16384: reasoning models (MiMo, DeepSeek R1) burn tokens on internal
+            # thinking before emitting content; 4096 caused empty replies on long resumes.
+            raw = await self._llm.simple_chat(messages, max_tokens=16384)
         except Exception as exc:
             logger.warning(f"TA parse_text error: {exc}")
             return ParseResponse(results=[], error=f"解析失败：{exc}")
